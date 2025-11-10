@@ -1,0 +1,575 @@
+// 全局状态
+let currentTable = null;
+let currentPage = 1;
+let pageSize = 50;
+let currentRowData = null;
+let currentDeleteWhere = null;
+
+// DOM元素
+const connectionStatus = document.getElementById('connectionStatus');
+const connectionForm = document.getElementById('connectionForm');
+const connectionMode = document.getElementById('connectionMode');
+const dsnGroup = document.getElementById('dsnGroup');
+const formGroup = document.getElementById('formGroup');
+const tablesPanel = document.getElementById('tablesPanel');
+const tableList = document.getElementById('tableList');
+const refreshTables = document.getElementById('refreshTables');
+const tabs = document.querySelectorAll('.tab');
+const tabContents = document.querySelectorAll('.tab-content');
+const dataTab = document.getElementById('dataTab');
+const schemaTab = document.getElementById('schemaTab');
+const queryTab = document.getElementById('queryTab');
+const dataTableHead = document.getElementById('dataTableHead');
+const dataTableBody = document.getElementById('dataTableBody');
+const refreshData = document.getElementById('refreshData');
+const pagination = document.getElementById('pagination');
+const paginationInfo = document.getElementById('paginationInfo');
+const schemaContent = document.getElementById('schemaContent');
+const sqlQuery = document.getElementById('sqlQuery');
+const executeQuery = document.getElementById('executeQuery');
+const clearQuery = document.getElementById('clearQuery');
+const queryResults = document.getElementById('queryResults');
+const editModal = document.getElementById('editModal');
+const editForm = document.getElementById('editForm');
+const closeEditModal = document.getElementById('closeEditModal');
+const cancelEdit = document.getElementById('cancelEdit');
+const saveEdit = document.getElementById('saveEdit');
+const deleteModal = document.getElementById('deleteModal');
+const closeDeleteModal = document.getElementById('closeDeleteModal');
+const cancelDelete = document.getElementById('cancelDelete');
+const confirmDelete = document.getElementById('confirmDelete');
+
+// 连接模式切换
+connectionMode.addEventListener('change', (e) => {
+    if (e.target.value === 'dsn') {
+        dsnGroup.style.display = 'block';
+        formGroup.style.display = 'none';
+    } else {
+        dsnGroup.style.display = 'none';
+        formGroup.style.display = 'block';
+    }
+});
+
+// 连接数据库
+connectionForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const mode = connectionMode.value;
+    const dbType = document.getElementById('dbType').value;
+    
+    let connectionInfo = {
+        type: dbType
+    };
+    
+    if (mode === 'dsn') {
+        connectionInfo.dsn = document.getElementById('dsn').value;
+    } else {
+        connectionInfo.host = document.getElementById('host').value;
+        connectionInfo.port = document.getElementById('port').value || '3306';
+        connectionInfo.user = document.getElementById('user').value;
+        connectionInfo.password = document.getElementById('password').value;
+        connectionInfo.database = document.getElementById('database').value;
+    }
+    
+    try {
+        const response = await fetch('/api/connect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(connectionInfo)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            updateConnectionStatus(true);
+            await loadTables();
+            showNotification('连接成功', 'success');
+        } else {
+            showNotification(data.message || '连接失败', 'error');
+        }
+    } catch (error) {
+        showNotification('连接失败: ' + error.message, 'error');
+    }
+});
+
+// 更新连接状态
+function updateConnectionStatus(connected) {
+    const indicator = connectionStatus.querySelector('.status-indicator');
+    const text = connectionStatus.querySelector('span:last-child');
+    
+    if (connected) {
+        indicator.classList.add('connected');
+        indicator.classList.remove('disconnected');
+        text.textContent = '已连接';
+    } else {
+        indicator.classList.remove('connected');
+        indicator.classList.add('disconnected');
+        text.textContent = '未连接';
+    }
+}
+
+// 加载表列表
+async function loadTables() {
+    try {
+        const response = await fetch('/api/tables');
+        const data = await response.json();
+        
+        if (data.success) {
+            tableList.innerHTML = '';
+            if (data.tables.length === 0) {
+                tableList.innerHTML = '<li style="padding: 1rem; color: var(--text-secondary);">没有找到表</li>';
+            } else {
+                data.tables.forEach(table => {
+                    const li = document.createElement('li');
+                    li.className = 'table-item';
+                    li.textContent = table;
+                    li.addEventListener('click', () => selectTable(table));
+                    tableList.appendChild(li);
+                });
+            }
+            tablesPanel.style.display = 'block';
+        }
+    } catch (error) {
+        showNotification('加载表列表失败: ' + error.message, 'error');
+    }
+}
+
+// 刷新表列表
+refreshTables.addEventListener('click', loadTables);
+
+// 选择表
+async function selectTable(tableName) {
+    // 更新UI
+    document.querySelectorAll('.table-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.textContent === tableName) {
+            item.classList.add('active');
+        }
+    });
+    
+    currentTable = tableName;
+    currentPage = 1;
+    
+    // 切换到数据标签页
+    switchTab('data');
+    await loadTableData();
+    await loadTableSchema();
+}
+
+// 加载表数据
+async function loadTableData() {
+    if (!currentTable) return;
+    
+    try {
+        const response = await fetch(`/api/table/data?table=${currentTable}&page=${currentPage}&pageSize=${pageSize}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            displayTableData(data.data, data.total);
+            updatePagination(data.total, data.page, data.pageSize);
+        }
+    } catch (error) {
+        showNotification('加载数据失败: ' + error.message, 'error');
+    }
+}
+
+// 显示表数据
+function displayTableData(rows, total) {
+    if (rows.length === 0) {
+        dataTableHead.innerHTML = '';
+        dataTableBody.innerHTML = '<tr><td colspan="100%" style="text-align: center; padding: 2rem; color: var(--text-secondary);">没有数据</td></tr>';
+        return;
+    }
+    
+    // 获取列名
+    const columns = Object.keys(rows[0]);
+    
+    // 创建表头
+    let headHTML = '<tr>';
+    columns.forEach(col => {
+        headHTML += `<th>${escapeHtml(col)}</th>`;
+    });
+    headHTML += '<th style="width: 150px;">操作</th>';
+    headHTML += '</tr>';
+    dataTableHead.innerHTML = headHTML;
+    
+    // 创建表体
+    let bodyHTML = '';
+    rows.forEach((row, index) => {
+        bodyHTML += '<tr>';
+        columns.forEach(col => {
+            const value = row[col];
+            bodyHTML += `<td>${value === null ? '<span style="color: var(--text-secondary);">NULL</span>' : escapeHtml(String(value))}</td>`;
+        });
+        // 使用HTML实体编码来安全地存储JSON数据
+        const rowData = JSON.stringify(row).replace(/"/g, '&quot;');
+        bodyHTML += `<td>
+            <button class="btn btn-secondary action-btn edit-row-btn" data-row="${rowData}">编辑</button>
+            <button class="btn btn-danger action-btn delete-row-btn" data-row="${rowData}">删除</button>
+        </td>`;
+        bodyHTML += '</tr>';
+    });
+    dataTableBody.innerHTML = bodyHTML;
+    
+    // 绑定事件监听器
+    dataTableBody.querySelectorAll('.edit-row-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const rowDataStr = this.getAttribute('data-row').replace(/&quot;/g, '"');
+            const rowData = JSON.parse(rowDataStr);
+            editRow(rowData);
+        });
+    });
+    
+    dataTableBody.querySelectorAll('.delete-row-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const rowDataStr = this.getAttribute('data-row').replace(/&quot;/g, '"');
+            const rowData = JSON.parse(rowDataStr);
+            deleteRow(rowData);
+        });
+    });
+}
+
+// 更新分页
+function updatePagination(total, page, pageSize) {
+    const totalPages = Math.ceil(total / pageSize);
+    
+    paginationInfo.textContent = `共 ${total} 条，第 ${page}/${totalPages} 页`;
+    
+    let paginationHTML = '';
+    paginationHTML += `<button ${page === 1 ? 'disabled' : ''} onclick="changePage(${page - 1})">上一页</button>`;
+    
+    for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+        paginationHTML += `<button class="${i === page ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+    }
+    
+    paginationHTML += `<button ${page === totalPages ? 'disabled' : ''} onclick="changePage(${page + 1})">下一页</button>`;
+    pagination.innerHTML = paginationHTML;
+}
+
+// 切换页码
+function changePage(page) {
+    currentPage = page;
+    loadTableData();
+}
+
+// 刷新数据
+refreshData.addEventListener('click', loadTableData);
+
+// 加载表结构
+async function loadTableSchema() {
+    if (!currentTable) return;
+    
+    try {
+        const response = await fetch(`/api/table/schema?table=${currentTable}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            schemaContent.textContent = data.schema;
+        }
+    } catch (error) {
+        showNotification('加载表结构失败: ' + error.message, 'error');
+    }
+}
+
+// 标签页切换
+tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        switchTab(tabName);
+    });
+});
+
+function switchTab(tabName) {
+    tabs.forEach(t => t.classList.remove('active'));
+    tabContents.forEach(tc => tc.classList.remove('active'));
+    
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`${tabName}Tab`).classList.add('active');
+    
+    if (tabName === 'schema' && currentTable) {
+        loadTableSchema();
+    }
+}
+
+// 执行SQL查询
+executeQuery.addEventListener('click', async () => {
+    const query = sqlQuery.value.trim();
+    if (!query) {
+        showNotification('请输入SQL查询', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ query })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            if (data.data) {
+                // 查询结果
+                displayQueryResults(data.data);
+            } else if (data.affected !== undefined) {
+                // 更新/删除/插入结果
+                queryResults.innerHTML = `<div class="query-message success">操作成功，影响 ${data.affected} 行</div>`;
+            }
+        } else {
+            queryResults.innerHTML = `<div class="query-message error">${data.message || '执行失败'}</div>`;
+        }
+    } catch (error) {
+        queryResults.innerHTML = `<div class="query-message error">执行失败: ${error.message}</div>`;
+    }
+});
+
+// 显示查询结果
+function displayQueryResults(rows) {
+    if (rows.length === 0) {
+        queryResults.innerHTML = '<div class="query-message">查询结果为空</div>';
+        return;
+    }
+    
+    const columns = Object.keys(rows[0]);
+    
+    let html = '<table><thead><tr>';
+    columns.forEach(col => {
+        html += `<th>${escapeHtml(col)}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    rows.forEach(row => {
+        html += '<tr>';
+        columns.forEach(col => {
+            const value = row[col];
+            html += `<td>${value === null ? '<span style="color: var(--text-secondary);">NULL</span>' : escapeHtml(String(value))}</td>`;
+        });
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    queryResults.innerHTML = html;
+}
+
+// 清空查询
+clearQuery.addEventListener('click', () => {
+    sqlQuery.value = '';
+    queryResults.innerHTML = '';
+});
+
+// 编辑行（全局函数，供外部调用）
+window.editRow = function(rowData) {
+    currentRowData = rowData;
+    
+    // 获取列信息
+    fetch(`/api/table/columns?table=${currentTable}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                let formHTML = '';
+                data.columns.forEach(col => {
+                    const value = rowData[col.name] || '';
+                    formHTML += `
+                        <div class="edit-form-group">
+                            <label>${escapeHtml(col.name)} <span style="color: var(--text-secondary);">(${col.type})</span></label>
+                            <input type="text" id="edit_${col.name}" value="${escapeHtml(String(value))}" ${col.key === 'PRI' ? 'readonly style="background: var(--surface);"' : ''}>
+                        </div>
+                    `;
+                });
+                editForm.innerHTML = formHTML;
+                editModal.style.display = 'flex';
+            }
+        })
+        .catch(err => {
+            showNotification('加载列信息失败: ' + err.message, 'error');
+        });
+}
+
+// 保存编辑
+saveEdit.addEventListener('click', async () => {
+    if (!currentTable || !currentRowData) return;
+    
+    // 获取主键列
+    const columns = await fetch(`/api/table/columns?table=${currentTable}`)
+        .then(res => res.json())
+        .then(data => data.columns);
+    
+    const primaryKeys = columns.filter(col => col.key === 'PRI');
+    
+    // 构建WHERE条件（使用主键）
+    const where = {};
+    primaryKeys.forEach(pk => {
+        where[pk.name] = currentRowData[pk.name];
+    });
+    
+    // 构建更新数据
+    const updateData = {};
+    columns.forEach(col => {
+        if (col.key !== 'PRI') {
+            const input = document.getElementById(`edit_${col.name}`);
+            if (input) {
+                const value = input.value.trim();
+                updateData[col.name] = value === '' ? null : value;
+            }
+        }
+    });
+    
+    try {
+        const response = await fetch('/api/row/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                table: currentTable,
+                data: updateData,
+                where: where
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('更新成功', 'success');
+            editModal.style.display = 'none';
+            loadTableData();
+        } else {
+            showNotification(data.message || '更新失败', 'error');
+        }
+    } catch (error) {
+        showNotification('更新失败: ' + error.message, 'error');
+    }
+});
+
+// 删除行（全局函数，供外部调用）
+window.deleteRow = function(rowData) {
+    currentRowData = rowData;
+    
+    // 获取主键列
+    fetch(`/api/table/columns?table=${currentTable}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const primaryKeys = data.columns.filter(col => col.key === 'PRI');
+                const where = {};
+                primaryKeys.forEach(pk => {
+                    where[pk.name] = rowData[pk.name];
+                });
+                currentDeleteWhere = where;
+                deleteModal.style.display = 'flex';
+            }
+        })
+        .catch(err => {
+            showNotification('加载列信息失败: ' + err.message, 'error');
+        });
+}
+
+// 确认删除
+confirmDelete.addEventListener('click', async () => {
+    if (!currentTable || !currentDeleteWhere) return;
+    
+    try {
+        const response = await fetch('/api/row/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                table: currentTable,
+                where: currentDeleteWhere
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('删除成功', 'success');
+            deleteModal.style.display = 'none';
+            loadTableData();
+        } else {
+            showNotification(data.message || '删除失败', 'error');
+        }
+    } catch (error) {
+        showNotification('删除失败: ' + error.message, 'error');
+    }
+});
+
+// 关闭模态框
+closeEditModal.addEventListener('click', () => {
+    editModal.style.display = 'none';
+});
+
+cancelEdit.addEventListener('click', () => {
+    editModal.style.display = 'none';
+});
+
+closeDeleteModal.addEventListener('click', () => {
+    deleteModal.style.display = 'none';
+});
+
+cancelDelete.addEventListener('click', () => {
+    deleteModal.style.display = 'none';
+});
+
+// 工具函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showNotification(message, type) {
+    // 简单的通知实现
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        background: ${type === 'success' ? 'var(--success-color)' : 'var(--danger-color)'};
+        color: white;
+        border-radius: 4px;
+        box-shadow: var(--shadow);
+        z-index: 10000;
+        animation: slideIn 0.3s;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// 添加动画样式
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);
+

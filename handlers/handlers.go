@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"dbweb/database"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -10,15 +12,22 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
+
+// ConnectionSession 连接会话信息
+type ConnectionSession struct {
+	db              database.Database
+	currentDatabase string
+	currentTable    string
+	createdAt       time.Time
+}
 
 // Server 服务器结构
 type Server struct {
-	templates       *template.Template
-	db              database.Database
-	dbMutex         sync.RWMutex
-	currentDatabase string
-	currentTable    string
+	templates     *template.Template
+	sessions      map[string]*ConnectionSession
+	sessionsMutex sync.RWMutex
 }
 
 // NewServer 创建新的服务器实例
@@ -30,7 +39,40 @@ func NewServer() (*Server, error) {
 
 	return &Server{
 		templates: tmpl,
+		sessions:  make(map[string]*ConnectionSession),
 	}, nil
+}
+
+// generateConnectionID 生成唯一的连接ID
+func generateConnectionID() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// getConnectionID 从请求中获取连接ID
+func getConnectionID(r *http.Request) string {
+	// 优先从请求头获取
+	connID := r.Header.Get("X-Connection-ID")
+	if connID != "" {
+		return connID
+	}
+	// 兼容：从查询参数获取
+	return r.URL.Query().Get("connectionId")
+}
+
+// getSession 根据连接ID获取会话
+func (s *Server) getSession(connectionID string) (*ConnectionSession, error) {
+	s.sessionsMutex.RLock()
+	defer s.sessionsMutex.RUnlock()
+
+	session, exists := s.sessions[connectionID]
+	if !exists {
+		return nil, fmt.Errorf("连接不存在或已断开")
+	}
+	return session, nil
 }
 
 // Home 首页
@@ -53,12 +95,11 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.dbMutex.Lock()
-	defer s.dbMutex.Unlock()
-
-	// 关闭旧连接
-	if s.db != nil {
-		s.db.Close()
+	// 生成连接ID
+	connectionID, err := generateConnectionID()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("生成连接ID失败: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	// 创建新连接
@@ -92,7 +133,18 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.db = db
+	// 创建会话
+	session := &ConnectionSession{
+		db:              db,
+		currentDatabase: "",
+		currentTable:    "",
+		createdAt:       time.Now(),
+	}
+
+	// 保存会话
+	s.sessionsMutex.Lock()
+	s.sessions[connectionID] = session
+	s.sessionsMutex.Unlock()
 
 	// 获取数据库列表
 	databases, err := db.GetDatabases()
@@ -102,24 +154,28 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":   true,
-		"message":   "连接成功",
-		"databases": databases,
+		"success":      true,
+		"message":      "连接成功",
+		"databases":    databases,
+		"connectionId": connectionID,
 	})
 }
 
 // GetTables 获取表列表
 func (s *Server) GetTables(w http.ResponseWriter, r *http.Request) {
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
 		return
 	}
 
-	tables, err := db.GetTables()
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tables, err := session.db.GetTables()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取表列表失败: %v", err), http.StatusInternalServerError)
 		return
@@ -133,26 +189,29 @@ func (s *Server) GetTables(w http.ResponseWriter, r *http.Request) {
 
 // GetTableSchema 获取表结构
 func (s *Server) GetTableSchema(w http.ResponseWriter, r *http.Request) {
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	tableName := r.URL.Query().Get("table")
 	if tableName == "" {
 		http.Error(w, "缺少表名参数", http.StatusBadRequest)
 		return
 	}
 
-	s.dbMutex.Lock()
-	s.currentTable = tableName
-	s.dbMutex.Unlock()
-
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	schema, err := db.GetTableSchema(tableName)
+	s.sessionsMutex.Lock()
+	session.currentTable = tableName
+	s.sessionsMutex.Unlock()
+
+	schema, err := session.db.GetTableSchema(tableName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取表结构失败: %v", err), http.StatusInternalServerError)
 		return
@@ -166,22 +225,25 @@ func (s *Server) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 
 // GetTableColumns 获取表列信息
 func (s *Server) GetTableColumns(w http.ResponseWriter, r *http.Request) {
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	tableName := r.URL.Query().Get("table")
 	if tableName == "" {
 		http.Error(w, "缺少表名参数", http.StatusBadRequest)
 		return
 	}
 
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	columns, err := db.GetTableColumns(tableName)
+	columns, err := session.db.GetTableColumns(tableName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取列信息失败: %v", err), http.StatusInternalServerError)
 		return
@@ -195,6 +257,12 @@ func (s *Server) GetTableColumns(w http.ResponseWriter, r *http.Request) {
 
 // GetTableData 获取表数据
 func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	tableName := r.URL.Query().Get("table")
 	if tableName == "" {
 		http.Error(w, "缺少表名参数", http.StatusBadRequest)
@@ -211,25 +279,22 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 		pageSize = 50
 	}
 
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	s.dbMutex.Lock()
-	s.currentTable = tableName
-	s.dbMutex.Unlock()
+	s.sessionsMutex.Lock()
+	session.currentTable = tableName
+	s.sessionsMutex.Unlock()
 
-	data, total, err := db.GetTableData(tableName, page, pageSize)
+	data, total, err := session.db.GetTableData(tableName, page, pageSize)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取数据失败: %v", err), http.StatusInternalServerError)
 		return
 	}
-	columns, err := db.GetTableColumns(tableName)
+	columns, err := session.db.GetTableColumns(tableName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取列信息失败: %v", err), http.StatusInternalServerError)
 		return
@@ -254,6 +319,12 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
 		Query string `json:"query"`
 	}
@@ -267,19 +338,16 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// 判断SQL类型
 	queryUpper := fmt.Sprintf("%.6s", req.Query)
 	if queryUpper == "SELECT" || queryUpper == "select" {
-		results, err := db.ExecuteQuery(req.Query)
+		results, err := session.db.ExecuteQuery(req.Query)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("执行查询失败: %v", err), http.StatusInternalServerError)
 			return
@@ -289,7 +357,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 			"data":    results,
 		})
 	} else if queryUpper == "UPDATE" || queryUpper == "update" {
-		affected, err := db.ExecuteUpdate(req.Query)
+		affected, err := session.db.ExecuteUpdate(req.Query)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("执行更新失败: %v", err), http.StatusInternalServerError)
 			return
@@ -299,7 +367,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 			"affected": affected,
 		})
 	} else if queryUpper == "DELETE" || queryUpper == "delete" {
-		affected, err := db.ExecuteDelete(req.Query)
+		affected, err := session.db.ExecuteDelete(req.Query)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("执行删除失败: %v", err), http.StatusInternalServerError)
 			return
@@ -309,7 +377,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 			"affected": affected,
 		})
 	} else if queryUpper == "INSERT" || queryUpper == "insert" {
-		affected, err := db.ExecuteInsert(req.Query)
+		affected, err := session.db.ExecuteInsert(req.Query)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("执行插入失败: %v", err), http.StatusInternalServerError)
 			return
@@ -330,6 +398,12 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
 		Table string                 `json:"table"`
 		Data  map[string]interface{} `json:"data"`
@@ -346,12 +420,9 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -390,7 +461,7 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 		first = false
 	}
 
-	affected, err := db.ExecuteUpdate(query)
+	affected, err := session.db.ExecuteUpdate(query)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("更新失败: %v", err), http.StatusInternalServerError)
 		return
@@ -409,6 +480,12 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
 		Table string                 `json:"table"`
 		Where map[string]interface{} `json:"where"`
@@ -424,12 +501,9 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -451,7 +525,7 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 		first = false
 	}
 
-	affected, err := db.ExecuteDelete(query)
+	affected, err := session.db.ExecuteDelete(query)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("删除失败: %v", err), http.StatusInternalServerError)
 		return
@@ -465,16 +539,19 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 
 // GetDatabases 获取数据库列表
 func (s *Server) GetDatabases(w http.ResponseWriter, r *http.Request) {
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
 		return
 	}
 
-	databases, err := db.GetDatabases()
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	databases, err := session.db.GetDatabases()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取数据库列表失败: %v", err), http.StatusInternalServerError)
 		return
@@ -493,6 +570,12 @@ func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
 		Database string `json:"database"`
 	}
@@ -506,27 +589,24 @@ func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.dbMutex.RLock()
-	db := s.db
-	s.dbMutex.RUnlock()
-
-	if db == nil {
-		http.Error(w, "未连接数据库", http.StatusBadRequest)
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := db.SwitchDatabase(req.Database); err != nil {
+	if err := session.db.SwitchDatabase(req.Database); err != nil {
 		http.Error(w, fmt.Sprintf("切换数据库失败: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	s.dbMutex.Lock()
-	s.currentDatabase = req.Database
-	s.currentTable = "" // 切换数据库时清空当前表
-	s.dbMutex.Unlock()
+	s.sessionsMutex.Lock()
+	session.currentDatabase = req.Database
+	session.currentTable = "" // 切换数据库时清空当前表
+	s.sessionsMutex.Unlock()
 
 	// 切换数据库后重新加载表列表
-	tables, err := db.GetTables()
+	tables, err := session.db.GetTables()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("获取表列表失败: %v", err), http.StatusInternalServerError)
 		return
@@ -546,15 +626,22 @@ func (s *Server) Disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.dbMutex.Lock()
-	defer s.dbMutex.Unlock()
-
-	if s.db != nil {
-		s.db.Close()
-		s.db = nil
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		return
 	}
-	s.currentDatabase = ""
-	s.currentTable = ""
+
+	s.sessionsMutex.Lock()
+	defer s.sessionsMutex.Unlock()
+
+	session, exists := s.sessions[connectionID]
+	if exists {
+		if session.db != nil {
+			session.db.Close()
+		}
+		delete(s.sessions, connectionID)
+	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
@@ -564,26 +651,38 @@ func (s *Server) Disconnect(w http.ResponseWriter, r *http.Request) {
 
 // GetStatus 获取连接状态
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
-	s.dbMutex.RLock()
-	db := s.db
-	currentDatabase := s.currentDatabase
-	currentTable := s.currentTable
-	s.dbMutex.RUnlock()
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		// 如果没有连接ID，返回未连接状态
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"connected": false,
+		})
+		return
+	}
 
-	connected := db != nil
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"connected": false,
+		})
+		return
+	}
+
+	s.sessionsMutex.RLock()
+	currentDatabase := session.currentDatabase
+	currentTable := session.currentTable
+	s.sessionsMutex.RUnlock()
+
+	// 获取数据库列表
+	databases, err := session.db.GetDatabases()
 	response := map[string]interface{}{
-		"connected": connected,
+		"connected": true,
 	}
-
-	if connected {
-		// 获取数据库列表
-		databases, err := db.GetDatabases()
-		if err == nil {
-			response["databases"] = databases
-		}
-		response["currentDatabase"] = currentDatabase
-		response["currentTable"] = currentTable
+	if err == nil {
+		response["databases"] = databases
 	}
+	response["currentDatabase"] = currentDatabase
+	response["currentTable"] = currentTable
 
 	json.NewEncoder(w).Encode(response)
 }

@@ -4,9 +4,13 @@ let currentPage = 1;
 let pageSize = 50;
 let currentRowData = null;
 let currentDeleteWhere = null;
+let connectionId = null; // 当前连接的ID
+let connectionInfo = null; // 当前连接信息
 
 // DOM元素
 const connectionStatus = document.getElementById('connectionStatus');
+const connectionInfoElement = document.getElementById('connectionInfo');
+const connectionInfoText = document.getElementById('connectionInfoText');
 const connectionForm = document.getElementById('connectionForm');
 const connectionMode = document.getElementById('connectionMode');
 const dsnGroup = document.getElementById('dsnGroup');
@@ -279,9 +283,22 @@ async function connectWithSavedConnection(savedConn) {
         const data = await response.json();
         
         if (response.ok && data.success) {
+            // 保存连接ID和连接信息
+            connectionId = data.connectionId;
+            const connInfo = {
+                type: savedConn.type || 'mysql',
+                host: savedConn.host || '',
+                port: savedConn.port || '3306',
+                user: savedConn.user || '',
+                dsn: savedConn.dsn || ''
+            };
+            connectionInfo = connInfo;
+            sessionStorage.setItem('currentConnectionId', connectionId);
+            sessionStorage.setItem('currentConnectionInfo', JSON.stringify(connInfo));
             updateConnectionStatus(true);
+            updateConnectionInfo(connInfo);
             // 检查DSN中是否包含数据库
-            const dsn = connectionInfo.dsn || '';
+            const dsn = connInfo.dsn || '';
             const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));
             
             if (hasDatabaseInDSN) {
@@ -371,11 +388,29 @@ loadSavedConnections();
 // 页面加载时尝试恢复连接
 async function restoreConnection() {
     try {
-        // 检查是否有活动的连接（通过检查服务器状态）
-        const response = await fetch('/api/status');
+        // 从 sessionStorage 获取保存的连接ID和连接信息
+        const savedConnectionId = sessionStorage.getItem('currentConnectionId');
+        const savedConnectionInfo = sessionStorage.getItem('currentConnectionInfo');
+        
+        if (!savedConnectionId) {
+            return;
+        }
+        
+        // 检查连接是否仍然有效
+        const response = await fetch('/api/status', {
+            headers: {
+                'X-Connection-ID': savedConnectionId
+            }
+        });
         const data = await response.json();
         
         if (response.ok && data.connected) {
+            // 恢复连接ID和连接信息
+            connectionId = savedConnectionId;
+            if (savedConnectionInfo) {
+                connectionInfo = JSON.parse(savedConnectionInfo);
+                updateConnectionInfo(connectionInfo);
+            }
             // 有活动的连接，恢复UI状态
             updateConnectionStatus(true);
             connectionPanel.style.display = 'none';
@@ -396,10 +431,20 @@ async function restoreConnection() {
                 await loadTableData();
                 await loadTableSchema();
             }
+        } else {
+            // 连接已失效，清除保存的连接ID
+            sessionStorage.removeItem('currentConnectionId');
+            sessionStorage.removeItem('currentConnectionInfo');
+            connectionId = null;
+            connectionInfo = null;
         }
     } catch (error) {
         // 连接失败，保持未连接状态
         console.log('无法恢复连接:', error);
+        connectionId = null;
+        connectionInfo = null;
+        sessionStorage.removeItem('currentConnectionId');
+        sessionStorage.removeItem('currentConnectionInfo');
     }
 }
 
@@ -442,7 +487,20 @@ connectionForm.addEventListener('submit', async (e) => {
         const data = await response.json();
         
         if (response.ok && data.success) {
+            // 保存连接ID和连接信息
+            connectionId = data.connectionId;
+            const connInfo = {
+                type: dbType,
+                host: mode === 'form' ? document.getElementById('host').value : '',
+                port: mode === 'form' ? (document.getElementById('port').value || '3306') : '',
+                user: mode === 'form' ? document.getElementById('user').value : '',
+                dsn: mode === 'dsn' ? document.getElementById('dsn').value : ''
+            };
+            connectionInfo = connInfo;
+            sessionStorage.setItem('currentConnectionId', connectionId);
+            sessionStorage.setItem('currentConnectionInfo', JSON.stringify(connInfo));
             updateConnectionStatus(true);
+            updateConnectionInfo(connInfo);
             
             // 如果勾选了"记住连接"，保存连接信息
             if (rememberConnection.checked && mode === 'form') {
@@ -501,6 +559,49 @@ function updateConnectionStatus(connected) {
     }
 }
 
+// 更新连接信息显示
+function updateConnectionInfo(info) {
+    if (!info) {
+        connectionInfoElement.style.display = 'none';
+        return;
+    }
+    
+    let infoText = '';
+    const dbTypeNames = {
+        'mysql': 'MySQL',
+        'postgres': 'PostgreSQL',
+        'postgresql': 'PostgreSQL',
+        'sqlite': 'SQLite',
+        'dameng': '达梦',
+        'openguass': 'OpenGauss',
+        'vastbase': 'Vastbase',
+        'kingbase': '人大金仓',
+        'oceandb': 'OceanDB'
+    };
+    
+    const dbTypeName = dbTypeNames[info.type] || info.type;
+    
+    if (info.dsn) {
+        // DSN 模式：尝试从 DSN 中提取信息
+        const userMatch = info.dsn.match(/^([^:]+):/);
+        const hostMatch = info.dsn.match(/@tcp\(([^:]+)/);
+        const portMatch = info.dsn.match(/@tcp\([^:]+:(\d+)/);
+        const user = userMatch ? userMatch[1] : 'unknown';
+        const host = hostMatch ? hostMatch[1] : 'unknown';
+        const port = portMatch ? portMatch[1] : '3306';
+        infoText = `${dbTypeName}://${user}@${host}:${port}`;
+    } else {
+        // 表单模式
+        const host = info.host || 'localhost';
+        const port = info.port || '3306';
+        const user = info.user || 'unknown';
+        infoText = `${dbTypeName}://${user}@${host}:${port}`;
+    }
+    
+    connectionInfoText.textContent = infoText;
+    connectionInfoElement.style.display = 'block';
+}
+
 // 加载数据库列表
 async function loadDatabases(databases) {
     databaseSelect.innerHTML = '<option value="">请选择数据库...</option>';
@@ -514,7 +615,13 @@ async function loadDatabases(databases) {
     } else {
         // 如果没有数据库列表,尝试从服务器获取
         try {
-            const response = await fetch('/api/databases');
+            const headers = {};
+            if (connectionId) {
+                headers['X-Connection-ID'] = connectionId;
+            }
+            const response = await fetch('/api/databases', {
+                headers: headers
+            });
             const data = await response.json();
             if (data.success && data.databases) {
                 data.databases.forEach(db => {
@@ -539,11 +646,15 @@ async function switchDatabase(databaseName) {
     }
     
     try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
         const response = await fetch('/api/database/switch', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify({ database: databaseName })
         });
         
@@ -607,17 +718,27 @@ tableFilter.addEventListener('input', filterTables);
 // 断开连接
 disconnectBtn.addEventListener('click', async () => {
     try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
         const response = await fetch('/api/disconnect', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: headers
         });
         
         const data = await response.json();
         
         if (response.ok && data.success) {
+            // 清除连接ID和连接信息
+            connectionId = null;
+            connectionInfo = null;
+            sessionStorage.removeItem('currentConnectionId');
+            sessionStorage.removeItem('currentConnectionInfo');
             updateConnectionStatus(false);
+            updateConnectionInfo(null);
             // 显示连接表单,隐藏数据库选择器
             connectionPanel.style.display = 'block';
             databasePanel.style.display = 'none';
@@ -640,7 +761,13 @@ disconnectBtn.addEventListener('click', async () => {
 // 加载表列表
 async function loadTables() {
     try {
-        const response = await fetch('/api/tables');
+        const headers = {};
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
+        const response = await fetch('/api/tables', {
+            headers: headers
+        });
         const data = await response.json();
         
         if (data.success) {
@@ -681,8 +808,14 @@ async function loadTableData() {
     if (!currentTable) return;
     
     try {
+        const headers = {};
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
         // 先获取列信息，确保按正确顺序显示
-        const columnsResponse = await fetch(`/api/table/columns?table=${currentTable}`);
+        const columnsResponse = await fetch(`/api/table/columns?table=${currentTable}`, {
+            headers: headers
+        });
         const columnsData = await columnsResponse.json();
         
         if (columnsData.success) {
@@ -690,7 +823,9 @@ async function loadTableData() {
         }
         
         // 然后获取数据
-        const response = await fetch(`/api/table/data?table=${currentTable}&page=${currentPage}&pageSize=${pageSize}`);
+        const response = await fetch(`/api/table/data?table=${currentTable}&page=${currentPage}&pageSize=${pageSize}`, {
+            headers: headers
+        });
         const data = await response.json();
         
         if (data.success) {
@@ -849,7 +984,13 @@ async function loadTableSchema() {
     if (!currentTable) return;
     
     try {
-        const response = await fetch(`/api/table/schema?table=${currentTable}`);
+        const headers = {};
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
+        const response = await fetch(`/api/table/schema?table=${currentTable}`, {
+            headers: headers
+        });
         const data = await response.json();
         
         if (data.success) {
@@ -889,11 +1030,15 @@ executeQuery.addEventListener('click', async () => {
     }
     
     try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
         const response = await fetch('/api/query', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify({ query })
         });
         
@@ -954,7 +1099,13 @@ window.editRow = function(rowData) {
     currentRowData = rowData;
     
     // 获取列信息
-    fetch(`/api/table/columns?table=${currentTable}`)
+    const headers = {};
+    if (connectionId) {
+        headers['X-Connection-ID'] = connectionId;
+    }
+    fetch(`/api/table/columns?table=${currentTable}`, {
+        headers: headers
+    })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -982,7 +1133,13 @@ saveEdit.addEventListener('click', async () => {
     if (!currentTable || !currentRowData) return;
     
     // 获取主键列
-    const columns = await fetch(`/api/table/columns?table=${currentTable}`)
+    const headers = {};
+    if (connectionId) {
+        headers['X-Connection-ID'] = connectionId;
+    }
+    const columns = await fetch(`/api/table/columns?table=${currentTable}`, {
+        headers: headers
+    })
         .then(res => res.json())
         .then(data => data.columns);
     
@@ -1007,11 +1164,15 @@ saveEdit.addEventListener('click', async () => {
     });
     
     try {
+        const requestHeaders = {
+            'Content-Type': 'application/json'
+        };
+        if (connectionId) {
+            requestHeaders['X-Connection-ID'] = connectionId;
+        }
         const response = await fetch('/api/row/update', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: requestHeaders,
             body: JSON.stringify({
                 table: currentTable,
                 data: updateData,
@@ -1038,7 +1199,13 @@ window.deleteRow = function(rowData) {
     currentRowData = rowData;
     
     // 获取主键列
-    fetch(`/api/table/columns?table=${currentTable}`)
+    const headers = {};
+    if (connectionId) {
+        headers['X-Connection-ID'] = connectionId;
+    }
+    fetch(`/api/table/columns?table=${currentTable}`, {
+        headers: headers
+    })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -1061,11 +1228,15 @@ confirmDelete.addEventListener('click', async () => {
     if (!currentTable || !currentDeleteWhere) return;
     
     try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (connectionId) {
+            headers['X-Connection-ID'] = connectionId;
+        }
         const response = await fetch('/api/row/delete', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify({
                 table: currentTable,
                 where: currentDeleteWhere

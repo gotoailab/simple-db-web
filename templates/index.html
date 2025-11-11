@@ -79,7 +79,8 @@
                 <div class="panel database-panel" id="databasePanel" style="display: none;">
                     <div class="panel-header">
                         <h2 class="panel-title">选择数据库</h2>
-                        <button class="btn-icon" id="disconnectBtn" title="断开连接">🔌</button>
+                        <button class="btn btn-secondary" id="disconnectBtn"
+                            style="font-size: 0.875rem; padding: 0.25rem 0.5rem; margin-bottom: 16px;">断开连接</button>
                     </div>
                     <div class="form-group">
                         <select id="databaseSelect" class="form-control">
@@ -92,7 +93,8 @@
                 <div class="panel tables-panel" id="tablesPanel" style="display: none;">
                     <div class="panel-header">
                         <h2 class="panel-title">数据表</h2>
-                        <button class="btn-icon" id="refreshTables" title="刷新">🔄</button>
+                        <button class="btn btn-secondary" id="refreshTables"
+                            style="font-size: 0.875rem; padding: 0.25rem 0.5rem; margin-bottom: 16px;">刷新</button>
                     </div>
                     <div class="form-group" style="margin-bottom: 0.5rem;">
                         <input type="text" id="tableFilter" class="form-control" placeholder="筛选表名..." style="margin-bottom: 0;">
@@ -109,6 +111,9 @@
                     <div class="connection-status" id="connectionStatus">
                         <span class="status-indicator disconnected"></span>
                         <span>未连接</span>
+                    </div>
+                    <div class="connection-info" id="connectionInfo" style="display: none; margin-left: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                        <span id="connectionInfoText"></span>
                     </div>
                 </div>
             </header>

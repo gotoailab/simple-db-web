@@ -11,7 +11,7 @@ import (
 
 type BaseMysqlBasedDB struct {
 	*MySQL
-	dialect Dialect
+	dialect MysqlBasedDialect
 
 	dialectType string
 	dbConfig    *DBConfig
@@ -75,7 +75,7 @@ func (m *BaseMysqlBasedDB) Connect(dsn string) error {
 		return err
 	}
 	m.dbConfig = dbConfig
-	m.dialect = GetDialectByType(m.dialectType, m.MySQL.db)
+	m.dialect = GetMysqlBasedDialectByType(m.dialectType, m.MySQL.db)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (m *BaseMysqlBasedDB) ConnectWithConfig(dbConfig *DBConfig) error {
 		return err
 	}
 	m.dbConfig = dbConfig
-	m.dialect = GetDialectByType(m.dialectType, m.MySQL.db)
+	m.dialect = GetMysqlBasedDialectByType(m.dialectType, m.MySQL.db)
 	return nil
 }
 

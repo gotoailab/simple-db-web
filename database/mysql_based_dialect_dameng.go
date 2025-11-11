@@ -6,23 +6,23 @@ import (
 	"strings"
 )
 
-type DamengDialect struct {
-	*BaseDialect
+type MysqlBasedDamengDialect struct {
+	*BaseMysqlBasedDialect
 }
 
-func NewDamengDialect(db *sql.DB) *DamengDialect {
-	return &DamengDialect{BaseDialect: NewBaseDialect(db)}
+func NewMysqlBasedDamengDialect(db *sql.DB) *MysqlBasedDamengDialect {
+	return &MysqlBasedDamengDialect{BaseMysqlBasedDialect: NewBaseMysqlBasedDialect(db)}
 }
 
-func (m *DamengDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
-	schema, err := m.BaseDialect.GetTableSchema(tableName)
+func (m *MysqlBasedDamengDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+	schema, err := m.BaseMysqlBasedDialect.GetTableSchema(tableName)
 	if err != nil {
 		return nil, err
 	}
 	return m.getColumnsFromSchema(schema)
 }
 
-func (m *DamengDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, error) {
+func (m *MysqlBasedDamengDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, error) {
 	columns := []ColumnInfo{}
 	
 	// 匹配 IDENTITY 模式，用于识别主键

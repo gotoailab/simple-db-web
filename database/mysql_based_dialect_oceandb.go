@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-type OceandbDialect struct {
-	*BaseDialect
+type MysqlBasedOceandbDialect struct {
+	*BaseMysqlBasedDialect
 }
 
-func NewOceandbDialect(db *sql.DB) *OceandbDialect {
-	return &OceandbDialect{BaseDialect: NewBaseDialect(db)}
+func NewMysqlBasedOceandbDialect(db *sql.DB) *MysqlBasedOceandbDialect {
+	return &MysqlBasedOceandbDialect{BaseMysqlBasedDialect: NewBaseMysqlBasedDialect(db)}
 }
 
-func (m *OceandbDialect) GetTableSchema(tableName string) (string, error) {
+func (m *MysqlBasedOceandbDialect) GetTableSchema(tableName string) (string, error) {
 	type CreateTable struct {
 		Table       string `db:"Table"`
 		CreateTable string `db:"Create Table"`
@@ -37,7 +37,7 @@ func (m *OceandbDialect) GetTableSchema(tableName string) (string, error) {
 	return createTables[0].CreateTable, nil
 }
 
-func (m *OceandbDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+func (m *MysqlBasedOceandbDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
 	schema, err := m.GetTableSchema(tableName)
 	if err != nil {
 		return nil, err

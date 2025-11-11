@@ -6,16 +6,16 @@ import (
 	"strings"
 )
 
-type OpenguassDialect struct {
-	*BaseDialect
+type MysqlBasedOpenguassDialect struct {
+	*BaseMysqlBasedDialect
 }
 
-func NewOpenguassDialect(db *sql.DB) *OpenguassDialect {
-	return &OpenguassDialect{BaseDialect: NewBaseDialect(db)}
+func NewMysqlBasedOpenguassDialect(db *sql.DB) *MysqlBasedOpenguassDialect {
+	return &MysqlBasedOpenguassDialect{BaseMysqlBasedDialect: NewBaseMysqlBasedDialect(db)}
 }
 
-func (m *OpenguassDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
-	schema, err := m.BaseDialect.GetTableSchema(tableName)
+func (m *MysqlBasedOpenguassDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+	schema, err := m.BaseMysqlBasedDialect.GetTableSchema(tableName)
 	if err != nil {
 		return nil, err
 	}

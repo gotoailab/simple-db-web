@@ -6,7 +6,7 @@ import (
 
 func TestDamengDialect_getColumnsFromSchema(t *testing.T) {
 	// 创建一个 DamengDialect 实例用于测试（不需要真实的数据库连接）
-	dialect := &DamengDialect{BaseDialect: &BaseDialect{}}
+	dialect := &MysqlBasedDamengDialect{BaseMysqlBasedDialect: &BaseMysqlBasedDialect{}}
 
 	tests := []struct {
 		name          string

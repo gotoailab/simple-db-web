@@ -6,38 +6,38 @@ import (
 	"strings"
 )
 
-func GetDialectByType(dbType string, db *sql.DB) Dialect {
+func GetMysqlBasedDialectByType(dbType string, db *sql.DB) MysqlBasedDialect {
 	switch dbType {
 	case "dameng":
-		return NewDamengDialect(db)
+		return NewMysqlBasedDamengDialect(db)
 	case "openguass":
-		return NewOpenguassDialect(db)
+		return NewMysqlBasedOpenguassDialect(db)
 	case "vastbase":
-		return NewVastbaseDialect(db)
+		return NewMysqlBasedVastbaseDialect(db)
 	case "kingbase":
-		return NewKingbaseDialect(db)
+		return NewMysqlBasedKingbaseDialect(db)
 	case "oceandb":
-		return NewOceandbDialect(db)
+		return NewMysqlBasedOceandbDialect(db)
 	}
 	return nil
 }
 
-type Dialect interface {
+type MysqlBasedDialect interface {
 	GetDatabases() ([]string, error)
 	GetTables() ([]string, error)
 	GetTableSchema(tableName string) (string, error)
 	GetTableColumns(tableName string) ([]ColumnInfo, error)
 }
 
-type BaseDialect struct {
+type BaseMysqlBasedDialect struct {
 	db *sql.DB
 }
 
-func NewBaseDialect(db *sql.DB) *BaseDialect {
-	return &BaseDialect{db: db}
+func NewBaseMysqlBasedDialect(db *sql.DB) *BaseMysqlBasedDialect {
+	return &BaseMysqlBasedDialect{db: db}
 }
 
-func (m *BaseDialect) GetDatabases() ([]string, error) {
+func (m *BaseMysqlBasedDialect) GetDatabases() ([]string, error) {
 	var databases []string
 	rows, err := m.db.Query("SHOW DATABASES")
 	if err != nil {
@@ -55,7 +55,7 @@ func (m *BaseDialect) GetDatabases() ([]string, error) {
 }
 
 // GetTables 获取所有表名
-func (m *BaseDialect) GetTables() ([]string, error) {
+func (m *BaseMysqlBasedDialect) GetTables() ([]string, error) {
 	var tables []string
 	rows, err := m.db.Query("SHOW TABLES")
 	if err != nil {
@@ -73,7 +73,7 @@ func (m *BaseDialect) GetTables() ([]string, error) {
 }
 
 // GetTableSchema 获取表结构
-func (m *BaseDialect) GetTableSchema(tableName string) (string, error) {
+func (m *BaseMysqlBasedDialect) GetTableSchema(tableName string) (string, error) {
 	query := fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName)
 	var schemas []string
 	rows, err := m.db.Query(query)
@@ -92,7 +92,7 @@ func (m *BaseDialect) GetTableSchema(tableName string) (string, error) {
 }
 
 // GetTableColumns 获取表的列信息
-func (m *BaseDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+func (m *BaseMysqlBasedDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
 	query := fmt.Sprintf("DESCRIBE `%s`", tableName)
 	var rows []map[string]interface{}
 	scanRows, err := m.db.Query(query)

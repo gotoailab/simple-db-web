@@ -11,7 +11,7 @@
         <!-- 顶部导航栏 -->
         <header class="header">
             <div class="header-content">
-                <h1 class="logo">🗄️ 数据库管理工具</h1>
+                <h1 class="logo">数据库管理工具</h1>
                 <div class="connection-status" id="connectionStatus">
                     <span class="status-indicator disconnected"></span>
                     <span>未连接</span>
@@ -31,6 +31,8 @@
                             <label>数据库类型</label>
                             <select id="dbType" class="form-control">
                                 <option value="dameng">达梦</option>
+                                <option value="openguass">OpenGauss</option>
+                                <option value="vastbase">Vastbase</option>
                                 <option value="mysql">MySQL</option>
                             </select>
                         </div>
@@ -55,9 +57,23 @@
                             <input type="text" id="user" class="form-control" placeholder="root">
                             <label>密码</label>
                             <input type="password" id="password" class="form-control" placeholder="password">
+                            <label style="display: flex; align-items: center; margin-top: 0.5rem;">
+                                <input type="checkbox" id="rememberConnection" style="margin-right: 0.5rem;">
+                                <span>记住连接</span>
+                            </label>
                         </div>
                         <button type="submit" class="btn btn-primary">连接</button>
                     </form>
+                </div>
+
+                <!-- 记住的连接列表 -->
+                <div class="panel saved-connections-panel" id="savedConnectionsPanel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">已保存的连接</h2>
+                        <button class="btn btn-secondary" id="clearSavedConnections"
+                            style="font-size: 0.875rem; padding: 0.25rem 0.5rem; margin-bottom: 16px;">清除所有</button>
+                    </div>
+                    <div class="saved-connections-list" id="savedConnectionsList"></div>
                 </div>
 
                 <!-- 数据库选择面板 -->

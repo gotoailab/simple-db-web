@@ -19,6 +19,10 @@ const tablesPanel = document.getElementById('tablesPanel');
 const tableList = document.getElementById('tableList');
 const refreshTables = document.getElementById('refreshTables');
 const tableFilter = document.getElementById('tableFilter');
+const rememberConnection = document.getElementById('rememberConnection');
+const savedConnectionsPanel = document.getElementById('savedConnectionsPanel');
+const savedConnectionsList = document.getElementById('savedConnectionsList');
+const clearSavedConnections = document.getElementById('clearSavedConnections');
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const dataTab = document.getElementById('dataTab');
@@ -55,6 +59,256 @@ connectionMode.addEventListener('change', (e) => {
     }
 });
 
+// 密码加密/解密函数（简单的 Base64 编码，不是真正的加密，但至少不是明文）
+function encryptPassword(password) {
+    if (!password) return '';
+    return btoa(unescape(encodeURIComponent(password)));
+}
+
+function decryptPassword(encrypted) {
+    if (!encrypted) return '';
+    try {
+        return decodeURIComponent(escape(atob(encrypted)));
+    } catch (e) {
+        return '';
+    }
+}
+
+// 生成连接的唯一标识（用于去重）
+function getConnectionKey(connectionInfo) {
+    if (connectionInfo.dsn) {
+        // DSN 模式：提取 host、port、user
+        const dsn = connectionInfo.dsn;
+        const userMatch = dsn.match(/^([^:]+):/);
+        const hostMatch = dsn.match(/@tcp\(([^:]+)/);
+        const portMatch = dsn.match(/@tcp\([^:]+:(\d+)/);
+        const user = userMatch ? userMatch[1] : '';
+        const host = hostMatch ? hostMatch[1] : '';
+        const port = portMatch ? portMatch[1] : '3306';
+        return `${connectionInfo.type}:${host}:${port}:${user}`;
+    } else {
+        return `${connectionInfo.type}:${connectionInfo.host || ''}:${connectionInfo.port || '3306'}:${connectionInfo.user || ''}`;
+    }
+}
+
+// 保存连接信息到 localStorage
+function saveConnection(connectionInfo) {
+    try {
+        const saved = getSavedConnections();
+        const key = getConnectionKey(connectionInfo);
+        
+        // 检查是否已存在（去重）
+        const existingIndex = saved.findIndex(conn => getConnectionKey(conn) === key);
+        
+        const connectionToSave = {
+            ...connectionInfo,
+            savedAt: new Date().toISOString()
+        };
+        
+        // 如果使用表单模式，加密密码
+        if (!connectionToSave.dsn && connectionToSave.password) {
+            connectionToSave.password = encryptPassword(connectionToSave.password);
+            connectionToSave.passwordEncrypted = true;
+        }
+        
+        if (existingIndex >= 0) {
+            // 更新已存在的连接
+            saved[existingIndex] = connectionToSave;
+        } else {
+            // 添加新连接
+            saved.push(connectionToSave);
+        }
+        
+        localStorage.setItem('savedConnections', JSON.stringify(saved));
+        loadSavedConnections();
+    } catch (error) {
+        console.error('保存连接失败:', error);
+    }
+}
+
+// 从 localStorage 获取保存的连接
+function getSavedConnections() {
+    try {
+        const saved = localStorage.getItem('savedConnections');
+        return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+        console.error('读取保存的连接失败:', error);
+        return [];
+    }
+}
+
+// 加载并显示保存的连接
+function loadSavedConnections() {
+    const saved = getSavedConnections();
+    savedConnectionsList.innerHTML = '';
+    
+    if (saved.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'padding: 1rem; color: var(--text-secondary); text-align: center; font-size: 0.875rem;';
+        emptyMsg.textContent = '暂无保存的连接';
+        savedConnectionsList.appendChild(emptyMsg);
+        return;
+    }
+    
+    saved.forEach((conn, index) => {
+        let displayText = '';
+        if (conn.dsn) {
+            // DSN 模式
+            const userMatch = conn.dsn.match(/^([^:]+):/);
+            const hostMatch = conn.dsn.match(/@tcp\(([^:]+)/);
+            const user = userMatch ? userMatch[1] : 'unknown';
+            const host = hostMatch ? hostMatch[1] : 'unknown';
+            displayText = `${conn.type || 'mysql'}://${user}@${host}`;
+        } else {
+            displayText = `${conn.type || 'mysql'}://${conn.user || 'unknown'}@${conn.host || 'unknown'}:${conn.port || '3306'}`;
+        }
+        
+        // 创建按钮容器
+        const buttonWrapper = document.createElement('div');
+        buttonWrapper.style.cssText = 'margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;';
+        
+        // 创建连接按钮
+        const connectBtn = document.createElement('button');
+        connectBtn.className = 'btn btn-secondary';
+        connectBtn.style.cssText = 'flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.5rem 0.75rem; font-size: 0.875rem;';
+        connectBtn.textContent = displayText;
+        connectBtn.title = displayText; // 完整文本作为提示
+        
+        // 创建删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-secondary';
+        deleteBtn.style.cssText = 'flex-shrink: 0; width: 2rem; padding: 0.5rem; font-size: 0.875rem; line-height: 1;';
+        deleteBtn.textContent = '×';
+        deleteBtn.title = '删除';
+        deleteBtn.dataset.index = index;
+        
+        // 点击连接按钮
+        connectBtn.addEventListener('click', () => {
+            connectWithSavedConnection(conn);
+        });
+        
+        // 点击删除按钮
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteSavedConnection(index);
+        });
+        
+        buttonWrapper.appendChild(connectBtn);
+        buttonWrapper.appendChild(deleteBtn);
+        savedConnectionsList.appendChild(buttonWrapper);
+    });
+}
+
+// 使用保存的连接进行连接
+async function connectWithSavedConnection(savedConn) {
+    // 填充表单
+    document.getElementById('dbType').value = savedConn.type || 'mysql';
+    
+    let connectionInfo = {
+        type: savedConn.type || 'mysql'
+    };
+    
+    if (savedConn.dsn) {
+        // DSN 模式
+        connectionMode.value = 'dsn';
+        document.getElementById('dsn').value = savedConn.dsn;
+        dsnGroup.style.display = 'block';
+        formGroup.style.display = 'none';
+        connectionInfo.dsn = savedConn.dsn;
+    } else {
+        // 表单模式
+        connectionMode.value = 'form';
+        document.getElementById('host').value = savedConn.host || '';
+        document.getElementById('port').value = savedConn.port || '3306';
+        document.getElementById('user').value = savedConn.user || '';
+        
+        // 解密密码
+        let password = '';
+        if (savedConn.passwordEncrypted) {
+            password = decryptPassword(savedConn.password);
+        } else {
+            password = savedConn.password || '';
+        }
+        document.getElementById('password').value = password;
+        
+        connectionInfo.host = savedConn.host || '';
+        connectionInfo.port = savedConn.port || '3306';
+        connectionInfo.user = savedConn.user || '';
+        connectionInfo.password = password;
+        connectionInfo.database = '';
+        
+        dsnGroup.style.display = 'none';
+        formGroup.style.display = 'block';
+    }
+    
+    // 直接执行连接逻辑，避免重复提交
+    try {
+        const response = await fetch('/api/connect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(connectionInfo)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            updateConnectionStatus(true);
+            // 检查DSN中是否包含数据库
+            const dsn = connectionInfo.dsn || '';
+            const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));
+            
+            if (hasDatabaseInDSN) {
+                // DSN中包含数据库,直接使用该数据库
+                connectionPanel.style.display = 'none';
+                databasePanel.style.display = 'block';
+                await loadDatabases(data.databases || []);
+                // 尝试从DSN中提取数据库名
+                const dbMatch = dsn.match(/\/([^\/\?]+)/);
+                if (dbMatch && dbMatch[1]) {
+                    const dbName = dbMatch[1];
+                    // 设置选择器并切换数据库
+                    databaseSelect.value = dbName;
+                    await switchDatabase(dbName);
+                } else {
+                    await loadTables();
+                }
+            } else {
+                // DSN中不包含数据库,显示数据库选择器
+                connectionPanel.style.display = 'none';
+                databasePanel.style.display = 'block';
+                await loadDatabases(data.databases || []);
+            }
+            showNotification('连接成功', 'success');
+        } else {
+            showNotification(data.message || '连接失败', 'error');
+        }
+    } catch (error) {
+        showNotification('连接失败: ' + error.message, 'error');
+    }
+}
+
+// 删除保存的连接
+function deleteSavedConnection(index) {
+    const saved = getSavedConnections();
+    saved.splice(index, 1);
+    localStorage.setItem('savedConnections', JSON.stringify(saved));
+    loadSavedConnections();
+}
+
+// 清空所有保存的连接
+clearSavedConnections.addEventListener('click', () => {
+    if (confirm('确定要清空所有保存的连接吗？')) {
+        localStorage.removeItem('savedConnections');
+        loadSavedConnections();
+        showNotification('已清空所有保存的连接', 'success');
+    }
+});
+
+// 页面加载时加载保存的连接
+loadSavedConnections();
+
 // 连接数据库
 connectionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -90,6 +344,14 @@ connectionForm.addEventListener('submit', async (e) => {
         
         if (response.ok && data.success) {
             updateConnectionStatus(true);
+            
+            // 如果勾选了"记住连接"，保存连接信息
+            if (rememberConnection.checked && mode === 'form') {
+                saveConnection(connectionInfo);
+            } else if (rememberConnection.checked && mode === 'dsn') {
+                saveConnection(connectionInfo);
+            }
+            
             // 检查DSN中是否包含数据库
             const dsn = mode === 'dsn' ? document.getElementById('dsn').value : '';
             const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));

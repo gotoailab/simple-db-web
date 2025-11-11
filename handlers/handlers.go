@@ -64,8 +64,8 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	switch info.Type {
 	case "mysql":
 		db = database.NewMySQL()
-	case "kingsoft":
-		db = database.NewKingsoftDB()
+	case "dameng":
+		db = database.NewKingsoftDB("dameng")
 	default:
 		http.Error(w, "不支持的数据库类型", http.StatusBadRequest)
 		return
@@ -79,9 +79,18 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.db = db
+
+	// 获取数据库列表
+	databases, err := db.GetDatabases()
+	if err != nil {
+		// 如果获取数据库列表失败,仍然返回连接成功,但数据库列表为空
+		databases = []string{}
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "连接成功",
+		"success":   true,
+		"message":   "连接成功",
+		"databases": databases,
 	})
 }
 
@@ -424,10 +433,105 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetDatabases 获取数据库列表
+func (s *Server) GetDatabases(w http.ResponseWriter, r *http.Request) {
+	s.dbMutex.RLock()
+	db := s.db
+	s.dbMutex.RUnlock()
+
+	if db == nil {
+		http.Error(w, "未连接数据库", http.StatusBadRequest)
+		return
+	}
+
+	databases, err := db.GetDatabases()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("获取数据库列表失败: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"databases": databases,
+	})
+}
+
+// SwitchDatabase 切换数据库
+func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Database string `json:"database"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("解析请求失败: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if req.Database == "" {
+		http.Error(w, "数据库名不能为空", http.StatusBadRequest)
+		return
+	}
+
+	s.dbMutex.RLock()
+	db := s.db
+	s.dbMutex.RUnlock()
+
+	if db == nil {
+		http.Error(w, "未连接数据库", http.StatusBadRequest)
+		return
+	}
+
+	if err := db.SwitchDatabase(req.Database); err != nil {
+		http.Error(w, fmt.Sprintf("切换数据库失败: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 切换数据库后重新加载表列表
+	tables, err := db.GetTables()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("获取表列表失败: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "切换数据库成功",
+		"tables":  tables,
+	})
+}
+
+// Disconnect 断开连接
+func (s *Server) Disconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.dbMutex.Lock()
+	defer s.dbMutex.Unlock()
+
+	if s.db != nil {
+		s.db.Close()
+		s.db = nil
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "已断开连接",
+	})
+}
+
 // SetupRoutes 设置路由
 func (s *Server) SetupRoutes() {
 	http.HandleFunc("/", s.Home)
 	http.HandleFunc("/api/connect", s.Connect)
+	http.HandleFunc("/api/disconnect", s.Disconnect)
+	http.HandleFunc("/api/databases", s.GetDatabases)
+	http.HandleFunc("/api/database/switch", s.SwitchDatabase)
 	http.HandleFunc("/api/tables", s.GetTables)
 	http.HandleFunc("/api/table/schema", s.GetTableSchema)
 	http.HandleFunc("/api/table/columns", s.GetTableColumns)

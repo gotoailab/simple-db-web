@@ -11,6 +11,10 @@ const connectionForm = document.getElementById('connectionForm');
 const connectionMode = document.getElementById('connectionMode');
 const dsnGroup = document.getElementById('dsnGroup');
 const formGroup = document.getElementById('formGroup');
+const connectionPanel = document.getElementById('connectionPanel');
+const databasePanel = document.getElementById('databasePanel');
+const databaseSelect = document.getElementById('databaseSelect');
+const disconnectBtn = document.getElementById('disconnectBtn');
 const tablesPanel = document.getElementById('tablesPanel');
 const tableList = document.getElementById('tableList');
 const refreshTables = document.getElementById('refreshTables');
@@ -68,7 +72,8 @@ connectionForm.addEventListener('submit', async (e) => {
         connectionInfo.port = document.getElementById('port').value || '3306';
         connectionInfo.user = document.getElementById('user').value;
         connectionInfo.password = document.getElementById('password').value;
-        connectionInfo.database = document.getElementById('database').value;
+        // 不指定数据库,连接后让用户选择
+        connectionInfo.database = '';
     }
     
     try {
@@ -84,7 +89,31 @@ connectionForm.addEventListener('submit', async (e) => {
         
         if (response.ok && data.success) {
             updateConnectionStatus(true);
-            await loadTables();
+            // 检查DSN中是否包含数据库
+            const dsn = mode === 'dsn' ? document.getElementById('dsn').value : '';
+            const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));
+            
+            if (hasDatabaseInDSN) {
+                // DSN中包含数据库,直接使用该数据库
+                connectionPanel.style.display = 'none';
+                databasePanel.style.display = 'block';
+                await loadDatabases(data.databases || []);
+                // 尝试从DSN中提取数据库名
+                const dbMatch = dsn.match(/\/([^\/\?]+)/);
+                if (dbMatch && dbMatch[1]) {
+                    const dbName = dbMatch[1];
+                    // 设置选择器并切换数据库
+                    databaseSelect.value = dbName;
+                    await switchDatabase(dbName);
+                } else {
+                    await loadTables();
+                }
+            } else {
+                // DSN中不包含数据库,显示数据库选择器
+                connectionPanel.style.display = 'none';
+                databasePanel.style.display = 'block';
+                await loadDatabases(data.databases || []);
+            }
             showNotification('连接成功', 'success');
         } else {
             showNotification(data.message || '连接失败', 'error');
@@ -109,6 +138,121 @@ function updateConnectionStatus(connected) {
         text.textContent = '未连接';
     }
 }
+
+// 加载数据库列表
+async function loadDatabases(databases) {
+    databaseSelect.innerHTML = '<option value="">请选择数据库...</option>';
+    if (databases && databases.length > 0) {
+        databases.forEach(db => {
+            const option = document.createElement('option');
+            option.value = db;
+            option.textContent = db;
+            databaseSelect.appendChild(option);
+        });
+    } else {
+        // 如果没有数据库列表,尝试从服务器获取
+        try {
+            const response = await fetch('/api/databases');
+            const data = await response.json();
+            if (data.success && data.databases) {
+                data.databases.forEach(db => {
+                    const option = document.createElement('option');
+                    option.value = db;
+                    option.textContent = db;
+                    databaseSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            showNotification('获取数据库列表失败: ' + error.message, 'error');
+        }
+    }
+}
+
+// 切换数据库函数
+async function switchDatabase(databaseName) {
+    if (!databaseName) {
+        tablesPanel.style.display = 'none';
+        currentTable = null;
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/database/switch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ database: databaseName })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('切换数据库成功', 'success');
+            // 加载表列表
+            if (data.tables) {
+                displayTables(data.tables);
+            } else {
+                await loadTables();
+            }
+        } else {
+            showNotification(data.message || '切换数据库失败', 'error');
+        }
+    } catch (error) {
+        showNotification('切换数据库失败: ' + error.message, 'error');
+    }
+}
+
+// 切换数据库
+databaseSelect.addEventListener('change', async (e) => {
+    await switchDatabase(e.target.value);
+});
+
+// 显示表列表
+function displayTables(tables) {
+    tableList.innerHTML = '';
+    if (tables.length === 0) {
+        tableList.innerHTML = '<li style="padding: 1rem; color: var(--text-secondary);">没有找到表</li>';
+    } else {
+        tables.forEach(table => {
+            const li = document.createElement('li');
+            li.className = 'table-item';
+            li.textContent = table;
+            li.addEventListener('click', () => selectTable(table));
+            tableList.appendChild(li);
+        });
+    }
+    tablesPanel.style.display = 'block';
+}
+
+// 断开连接
+disconnectBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/api/disconnect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            updateConnectionStatus(false);
+            // 显示连接表单,隐藏数据库选择器
+            connectionPanel.style.display = 'block';
+            databasePanel.style.display = 'none';
+            tablesPanel.style.display = 'none';
+            currentTable = null;
+            databaseSelect.innerHTML = '<option value="">请选择数据库...</option>';
+            showNotification('已断开连接', 'success');
+        } else {
+            showNotification(data.message || '断开连接失败', 'error');
+        }
+    } catch (error) {
+        showNotification('断开连接失败: ' + error.message, 'error');
+    }
+});
 
 // 加载表列表
 async function loadTables() {

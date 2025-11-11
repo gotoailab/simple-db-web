@@ -3,77 +3,67 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"ksogit.kingsoft.net/kgo/mysql"
 )
 
+func GetDialectByType(dbType string, db mysql.DBAdapter) Dialect {
+	switch dbType {
+	case "dameng":
+		return NewDamengDialect(db)
+	}
+	return nil
+}
+
 type Dialect interface {
+	GetDatabases() ([]string, error)
 	GetTables() ([]string, error)
 	GetTableSchema(tableName string) (string, error)
 	GetTableColumns(tableName string) ([]ColumnInfo, error)
 }
 
-type MySQLDialect struct {
+type BaseDialect struct {
 	db mysql.DBAdapter
 }
 
-func NewMySQLDialect(db mysql.DBAdapter) *MySQLDialect {
-	return &MySQLDialect{db: db}
+func NewBaseDialect(db mysql.DBAdapter) *BaseDialect {
+	return &BaseDialect{db: db}
+}
+
+func (m *BaseDialect) GetDatabases() ([]string, error) {
+	var databases []string
+	if err := m.db.Query(&databases, "SHOW DATABASES"); err != nil {
+		return nil, fmt.Errorf("查询数据库列表失败: %w", err)
+	}
+	return databases, nil
 }
 
 // GetTables 获取所有表名
-func (m *MySQLDialect) GetTables() ([]string, error) {
-	var rows []map[string]interface{}
-	if err := m.db.Query(&rows, "SHOW TABLES"); err != nil {
-		return nil, fmt.Errorf("查询表列表失败: %w", err)
-	}
+func (m *BaseDialect) GetTables() ([]string, error) {
 	var tables []string
-	for _, row := range rows {
-		for _, v := range row {
-			switch val := v.(type) {
-			case []byte:
-				tables = append(tables, string(val))
-			case string:
-				tables = append(tables, val)
-			default:
-				tables = append(tables, fmt.Sprint(val))
-			}
-			break
-		}
+	if err := m.db.Query(&tables, "SHOW TABLES"); err != nil {
+		return nil, fmt.Errorf("查询表列表失败: %w", err)
 	}
 	return tables, nil
 }
 
 // GetTableSchema 获取表结构
-func (m *MySQLDialect) GetTableSchema(tableName string) (string, error) {
+func (m *BaseDialect) GetTableSchema(tableName string) (string, error) {
 	query := fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName)
-	var rows []map[string]interface{}
-	if err := m.db.Query(&rows, query); err != nil {
+	var schemas []string
+	if err := m.db.Query(&schemas, query); err != nil {
 		return "", fmt.Errorf("查询表结构失败: %w", err)
 	}
-	if len(rows) == 0 {
+	if len(schemas) == 0 {
 		return "", fmt.Errorf("表 %s 不存在", tableName)
 	}
-	for k, v := range rows[0] {
-		if strings.EqualFold(k, "Create Table") {
-			if b, ok := v.([]byte); ok {
-				return string(b), nil
-			}
-			return fmt.Sprint(v), nil
-		}
-	}
-	for _, v := range rows[0] {
-		if b, ok := v.([]byte); ok {
-			return string(b), nil
-		}
-		return fmt.Sprint(v), nil
-	}
-	return "", fmt.Errorf("未能获取表结构")
+	return schemas[0], nil
 }
 
 // GetTableColumns 获取表的列信息
-func (m *MySQLDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+func (m *BaseDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
 	query := fmt.Sprintf("DESCRIBE `%s`", tableName)
 	var rows []map[string]interface{}
 	if err := m.db.Query(&rows, query); err != nil {
@@ -126,6 +116,32 @@ func (m *MySQLDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
 			}
 		}
 		columns = append(columns, col)
+	}
+	return columns, nil
+}
+
+type DamengDialect struct {
+	*BaseDialect
+}
+
+func NewDamengDialect(db mysql.DBAdapter) *DamengDialect {
+	return &DamengDialect{BaseDialect: NewBaseDialect(db)}
+}
+
+func (m *DamengDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+	schema, err := m.BaseDialect.GetTableSchema(tableName)
+	if err != nil {
+		return nil, err
+	}
+	columns := []ColumnInfo{}
+	reg := regexp.MustCompile(`"([^"]+)"\s+([^\s]+)\s+DEFAULT\s+'([^']+)'`)
+	matches := reg.FindAllStringSubmatch(schema, -1)
+	for _, match := range matches {
+		columns = append(columns, ColumnInfo{
+			Name: match[1],
+			Type: match[2],
+			DefaultValue: match[3],
+		})
 	}
 	return columns, nil
 }

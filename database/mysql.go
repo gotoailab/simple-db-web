@@ -24,11 +24,11 @@ func (m *MySQL) Connect(dsn string) error {
 	if err != nil {
 		return fmt.Errorf("打开数据库连接失败: %w", err)
 	}
-	
+
 	if err := db.Ping(); err != nil {
 		return fmt.Errorf("连接数据库失败: %w", err)
 	}
-	
+
 	m.db = db
 	return nil
 }
@@ -94,17 +94,17 @@ func (m *MySQL) GetTableColumns(tableName string) ([]ColumnInfo, error) {
 		var col ColumnInfo
 		var null, key, extra string
 		var defaultVal sql.NullString
-		
+
 		if err := rows.Scan(&col.Name, &col.Type, &null, &key, &defaultVal, &extra); err != nil {
 			return nil, err
 		}
-		
+
 		col.Nullable = (null == "YES")
 		col.Key = key
 		if defaultVal.Valid {
 			col.DefaultValue = defaultVal.String
 		}
-		
+
 		columns = append(columns, col)
 	}
 	return columns, rows.Err()
@@ -123,7 +123,7 @@ func (m *MySQL) ExecuteQuery(query string) ([]map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var results []map[string]interface{}
+	var results = make([]map[string]interface{}, 0)
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
@@ -189,7 +189,7 @@ func (m *MySQL) GetTableData(tableName string, page, pageSize int) ([]map[string
 	// 获取分页数据
 	offset := (page - 1) * pageSize
 	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT %d OFFSET %d", tableName, pageSize, offset)
-	
+
 	rows, err := m.db.Query(query)
 	if err != nil {
 		return nil, 0, fmt.Errorf("查询数据失败: %w", err)
@@ -201,7 +201,7 @@ func (m *MySQL) GetTableData(tableName string, page, pageSize int) ([]map[string
 		return nil, 0, err
 	}
 
-	var results []map[string]interface{}
+	var results = make([]map[string]interface{}, 0)
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
@@ -230,32 +230,74 @@ func (m *MySQL) GetTableData(tableName string, page, pageSize int) ([]map[string
 	return results, total, rows.Err()
 }
 
+// GetDatabases 获取所有数据库名称
+func (m *MySQL) GetDatabases() ([]string, error) {
+	rows, err := m.db.Query("SHOW DATABASES")
+	if err != nil {
+		return nil, fmt.Errorf("查询数据库列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var dbName string
+		if err := rows.Scan(&dbName); err != nil {
+			return nil, err
+		}
+		// 过滤掉系统数据库
+		if dbName != "information_schema" && dbName != "performance_schema" &&
+			dbName != "mysql" && dbName != "sys" {
+			databases = append(databases, dbName)
+		}
+	}
+	return databases, rows.Err()
+}
+
+// SwitchDatabase 切换当前使用的数据库
+func (m *MySQL) SwitchDatabase(databaseName string) error {
+	_, err := m.db.Exec(fmt.Sprintf("USE `%s`", databaseName))
+	if err != nil {
+		return fmt.Errorf("切换数据库失败: %w", err)
+	}
+	return nil
+}
+
 // BuildDSN 根据连接信息构建DSN
 func BuildDSN(info ConnectionInfo) string {
 	if info.DSN != "" {
 		return info.DSN
 	}
-	
+
 	// MySQL DSN格式: user:password@tcp(host:port)/database
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
-		info.User,
-		info.Password,
-		info.Host,
-		info.Port,
-		info.Database,
-	)
-	
+	// 如果Database为空,则不指定数据库,用于先连接到服务器
+	var dsn string
+	if info.Database != "" {
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
+			info.User,
+			info.Password,
+			info.Host,
+			info.Port,
+			info.Database,
+		)
+	} else {
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/",
+			info.User,
+			info.Password,
+			info.Host,
+			info.Port,
+		)
+	}
+
 	// 添加参数
 	params := []string{
 		"charset=utf8mb4",
 		"parseTime=True",
 		"loc=Local",
 	}
-	
+
 	if len(params) > 0 {
 		dsn += "?" + strings.Join(params, "&")
 	}
-	
+
 	return dsn
 }
-

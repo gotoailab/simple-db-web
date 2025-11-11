@@ -40,6 +40,12 @@ type Database interface {
 	
 	// GetTableColumns 获取表的列信息
 	GetTableColumns(tableName string) ([]ColumnInfo, error)
+	
+	// GetDatabases 获取所有数据库名称列表
+	GetDatabases() ([]string, error)
+	
+	// SwitchDatabase 切换当前使用的数据库
+	SwitchDatabase(databaseName string) error
 }
 
 // ColumnInfo 列信息

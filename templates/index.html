@@ -24,13 +24,13 @@
             <!-- 左侧边栏 -->
             <aside class="sidebar">
                 <!-- 连接面板 -->
-                <div class="panel connection-panel">
+                <div class="panel connection-panel" id="connectionPanel">
                     <h2 class="panel-title">连接数据库</h2>
                     <form id="connectionForm" class="connection-form">
                         <div class="form-group">
                             <label>数据库类型</label>
                             <select id="dbType" class="form-control">
-                                <option value="mysql">Kingsoft</option>
+                                <option value="dameng">达梦</option>
                                 <option value="mysql">MySQL</option>
                             </select>
                         </div>
@@ -44,7 +44,7 @@
                         <div id="dsnGroup" class="form-group">
                             <label>DSN</label>
                             <input type="text" id="dsn" class="form-control" 
-                                   placeholder="user:password@tcp(host:port)/database">
+                                   placeholder="user:password@tcp(host:port)/">
                         </div>
                         <div id="formGroup" class="form-group" style="display: none;">
                             <label>主机</label>
@@ -55,11 +55,22 @@
                             <input type="text" id="user" class="form-control" placeholder="root">
                             <label>密码</label>
                             <input type="password" id="password" class="form-control" placeholder="password">
-                            <label>数据库</label>
-                            <input type="text" id="database" class="form-control" placeholder="database">
                         </div>
                         <button type="submit" class="btn btn-primary">连接</button>
                     </form>
+                </div>
+
+                <!-- 数据库选择面板 -->
+                <div class="panel database-panel" id="databasePanel" style="display: none;">
+                    <div class="panel-header">
+                        <h2 class="panel-title">选择数据库</h2>
+                        <button class="btn-icon" id="disconnectBtn" title="断开连接">🔌</button>
+                    </div>
+                    <div class="form-group">
+                        <select id="databaseSelect" class="form-control">
+                            <option value="">请选择数据库...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- 表列表 -->

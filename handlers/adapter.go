@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"io/fs"
 	"net/http"
 )
 
@@ -12,6 +13,8 @@ type Router interface {
 	POST(path string, handler http.HandlerFunc)
 	// Static 注册静态文件路由
 	Static(path, dir string)
+	// StaticFS 注册静态文件路由（使用 embed.FS）
+	StaticFS(path string, fsys fs.FS)
 	// HandleFunc 注册任意 HTTP 方法的路由（用于兼容标准库）
 	HandleFunc(path string, handler http.HandlerFunc)
 	// SetPrefix 设置路由前缀（可选，如果适配器不支持则忽略）
@@ -54,6 +57,18 @@ func (r *StandardRouter) POST(path string, handler http.HandlerFunc) {
 func (r *StandardRouter) Static(path, dir string) {
 	fs := http.FileServer(http.Dir(dir))
 	http.Handle(path, http.StripPrefix(path, fs))
+}
+
+// StaticFS 注册静态文件路由（使用 embed.FS）
+func (r *StandardRouter) StaticFS(path string, fsys fs.FS) {
+	// staticFS 使用 all:static，所以路径是 static/
+	subFS, err := fs.Sub(fsys, "static")
+	if err != nil {
+		// 如果失败，尝试直接使用
+		subFS = fsys
+	}
+	httpFS := http.FS(subFS)
+	http.Handle(path, http.StripPrefix(path, http.FileServer(httpFS)))
 }
 
 // HandleFunc 注册任意 HTTP 方法的路由
@@ -116,6 +131,11 @@ func (r *PrefixRouter) POST(path string, handler http.HandlerFunc) {
 // Static 注册静态文件路由
 func (r *PrefixRouter) Static(path, dir string) {
 	r.router.Static(r.joinPath(path), dir)
+}
+
+// StaticFS 注册静态文件路由（使用 embed.FS）
+func (r *PrefixRouter) StaticFS(path string, fsys fs.FS) {
+	r.router.StaticFS(r.joinPath(path), fsys)
 }
 
 // HandleFunc 注册任意 HTTP 方法的路由

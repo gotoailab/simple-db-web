@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"io/fs"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -35,6 +36,17 @@ func (r *EchoRouter) POST(path string, handler http.HandlerFunc) {
 // Static 注册静态文件路由
 func (r *EchoRouter) Static(path, dir string) {
 	r.echo.Static(path, dir)
+}
+
+// StaticFS 注册静态文件路由（使用 embed.FS）
+func (r *EchoRouter) StaticFS(path string, fsys fs.FS) {
+	// staticFS 使用 all:static，所以路径是 static/
+	subFS, err := fs.Sub(fsys, "static")
+	if err != nil {
+		// 如果失败，尝试直接使用
+		subFS = fsys
+	}
+	r.echo.StaticFS(path, subFS)
 }
 
 // HandleFunc 注册任意 HTTP 方法的路由

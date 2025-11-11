@@ -1,8 +1,10 @@
 package handlers
 
 import (
-	"github.com/gin-gonic/gin"
+	"io/fs"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 // GinRouter Gin 框架的路由适配器
@@ -34,6 +36,17 @@ func (r *GinRouter) POST(path string, handler http.HandlerFunc) {
 // Static 注册静态文件路由
 func (r *GinRouter) Static(path, dir string) {
 	r.engine.Static(path, dir)
+}
+
+// StaticFS 注册静态文件路由（使用 embed.FS）
+func (r *GinRouter) StaticFS(path string, fsys fs.FS) {
+	// staticFS 使用 all:static，所以路径是 static/
+	subFS, err := fs.Sub(fsys, "static")
+	if err != nil {
+		// 如果失败，尝试直接使用
+		subFS = fsys
+	}
+	r.engine.StaticFS(path, http.FS(subFS))
 }
 
 // HandleFunc 注册任意 HTTP 方法的路由（Gin 中会注册为 GET 和 POST）

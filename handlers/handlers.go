@@ -44,8 +44,11 @@ type Server struct {
 }
 
 // NewServer 创建新的服务器实例
+// 使用 embed 嵌入的模板和静态文件，支持通过 go mod 引入
 func NewServer() (*Server, error) {
-	tmpl, err := template.ParseGlob("templates/*.html")
+	// 从 embed 文件系统解析模板
+	// templatesFS 使用 all:templates，所以路径是 templates/*.html
+	tmpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("加载模板失败: %w", err)
 	}
@@ -796,9 +799,9 @@ func (s *Server) RegisterRoutes(router Router) {
 	router.POST("/api/row/update", s.UpdateRow)
 	router.POST("/api/row/delete", s.DeleteRow)
 
-	// 静态文件
-	router.Static("/static/", "static")
-
+	// 静态文件 - 使用 embed.FS
+	router.StaticFS("/static/", staticFS)
+	
 	// 获取数据库类型列表
 	router.HandleFunc("/api/database/types", s.GetDatabaseTypes)
 }

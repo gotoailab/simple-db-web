@@ -70,6 +70,10 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		db = database.NewKingsoftDB("openguass")
 	case "vastbase":
 		db = database.NewKingsoftDB("vastbase")
+	case "kingbase":
+		db = database.NewKingsoftDB("kingbase")
+	case "oceandb":
+		db = database.NewKingsoftDB("oceandb")
 	default:
 		http.Error(w, "不支持的数据库类型", http.StatusBadRequest)
 		return

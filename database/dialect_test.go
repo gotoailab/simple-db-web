@@ -246,8 +246,6 @@ func TestQueryMetaData(t *testing.T) {
 }
 
 func TestOpenguassDialect_getColumnsFromSchema(t *testing.T) {
-	// 创建一个 OpenguassDialect 实例用于测试（不需要真实的数据库连接）
-	dialect := &OpenguassDialect{BaseDialect: &BaseDialect{}}
 
 	tests := []struct {
 		name          string
@@ -412,7 +410,187 @@ func TestOpenguassDialect_getColumnsFromSchema(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 直接调用私有方法 getColumnsFromSchema
-			columns, err := dialect.getColumnsFromSchema(tt.schema)
+			columns, err := getColumnsFroPGLikeSchema(tt.schema)
+
+			// 验证错误
+			if tt.expectedError {
+				if err == nil {
+					t.Errorf("期望返回错误，但实际没有错误")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("不期望返回错误，但实际返回: %v", err)
+				return
+			}
+
+			// 验证列数量
+			if len(columns) != len(tt.expectedCols) {
+				t.Errorf("列数量不匹配: 期望 %d, 实际 %d", len(tt.expectedCols), len(columns))
+				t.Logf("期望的列: %+v", tt.expectedCols)
+				t.Logf("实际的列: %+v", columns)
+				return
+			}
+
+			// 验证每列的信息
+			for i, expectedCol := range tt.expectedCols {
+				if i >= len(columns) {
+					t.Errorf("列索引 %d 超出范围", i)
+					continue
+				}
+
+				actualCol := columns[i]
+				if actualCol.Name != expectedCol.Name {
+					t.Errorf("列 %d 名称不匹配: 期望 %s, 实际 %s", i, expectedCol.Name, actualCol.Name)
+				}
+				if actualCol.Type != expectedCol.Type {
+					t.Errorf("列 %d 类型不匹配: 期望 %s, 实际 %s", i, expectedCol.Type, actualCol.Type)
+				}
+				if actualCol.DefaultValue != expectedCol.DefaultValue {
+					t.Errorf("列 %d 默认值不匹配: 期望 %s, 实际 %s", i, expectedCol.DefaultValue, actualCol.DefaultValue)
+				}
+				if actualCol.Key != expectedCol.Key {
+					t.Errorf("列 %d 主键标识不匹配: 期望 %s, 实际 %s", i, expectedCol.Key, actualCol.Key)
+				}
+			}
+		})
+	}
+}
+
+func TestOceandbDialect_getColumnsFroMySQLLikeSchema(t *testing.T) {
+	tests := []struct {
+		name          string
+		schema        string
+		expectedCols  []ColumnInfo
+		expectedError bool
+	}{
+		{
+			name: "测试用例：kim_last_read_v3 表（实际场景）",
+			schema: "CREATE TABLE `kim_last_read_v3` (\n" +
+				"	`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n" +
+				"	`userid` bigint(11) NOT NULL DEFAULT '0',\n" +
+				"	`corpid` bigint(11) NOT NULL DEFAULT '0',\n" +
+				"	`chatid` bigint(20) unsigned NOT NULL DEFAULT '0',\n" +
+				"	`last_read_seq` bigint(20) unsigned NOT NULL DEFAULT '0',\n" +
+				"	`utime` bigint(20) unsigned NOT NULL DEFAULT '0' COMMENT '已读更新时间,纳秒',\n" +
+				"	PRIMARY KEY (`id`),\n" +
+				"	UNIQUE KEY `_uk_userid_chatid` (`userid`, `chatid`) BLOCK_SIZE 16384 LOCAL,\n" +
+				"	UNIQUE KEY `_uk_userid_utime` (`userid`, `utime`) BLOCK_SIZE 16384 LOCAL,\n" +
+				"	KEY `idx_userid_chatid_last_read_seq` (`userid`, `chatid`, `last_read_seq`) BLOCK_SIZE 16384 LOCAL\n" +
+				") AUTO_INCREMENT = 1 DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20) unsigned", DefaultValue: "", Key: "PRI"},
+				{Name: "userid", Type: "bigint(11)", DefaultValue: "0", Key: ""},
+				{Name: "corpid", Type: "bigint(11)", DefaultValue: "0", Key: ""},
+				{Name: "chatid", Type: "bigint(20) unsigned", DefaultValue: "0", Key: ""},
+				{Name: "last_read_seq", Type: "bigint(20) unsigned", DefaultValue: "0", Key: ""},
+				{Name: "utime", Type: "bigint(20) unsigned", DefaultValue: "0", Key: ""},
+			},
+			expectedError: false,
+		},
+		{
+			name: "测试包含字符串 DEFAULT 值的列",
+			schema: "CREATE TABLE `test_table` (\n" +
+				"	`id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
+				"	`name` varchar(100) NOT NULL DEFAULT 'test',\n" +
+				"	`email` varchar(255) NOT NULL DEFAULT '',\n" +
+				"	`status` varchar(20) NOT NULL DEFAULT 'active',\n" +
+				"	PRIMARY KEY (`id`)\n" +
+				")",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20)", DefaultValue: "", Key: "PRI"},
+				{Name: "name", Type: "varchar(100)", DefaultValue: "test", Key: ""},
+				{Name: "email", Type: "varchar(255)", DefaultValue: "", Key: ""},
+				{Name: "status", Type: "varchar(20)", DefaultValue: "active", Key: ""},
+			},
+			expectedError: false,
+		},
+		{
+			name: "测试数字 DEFAULT 值",
+			schema: "CREATE TABLE `test_table` (\n" +
+				"	`id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
+				"	`age` int(11) NOT NULL DEFAULT 18,\n" +
+				"	`score` decimal(10,2) NOT NULL DEFAULT 0.00,\n" +
+				"	`count` bigint(20) NOT NULL DEFAULT 0,\n" +
+				"	PRIMARY KEY (`id`)\n" +
+				")",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20)", DefaultValue: "", Key: "PRI"},
+				{Name: "age", Type: "int(11)", DefaultValue: "18", Key: ""},
+				{Name: "score", Type: "decimal(10,2)", DefaultValue: "0.00", Key: ""},
+				{Name: "count", Type: "bigint(20)", DefaultValue: "0", Key: ""},
+			},
+			expectedError: false,
+		},
+		{
+			name: "测试没有 DEFAULT 值的列",
+			schema: "CREATE TABLE `test_table` (\n" +
+				"	`id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
+				"	`name` varchar(100) NOT NULL,\n" +
+				"	`created_at` timestamp NOT NULL,\n" +
+				"	PRIMARY KEY (`id`)\n" +
+				")",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20)", DefaultValue: "", Key: "PRI"},
+				{Name: "name", Type: "varchar(100)", DefaultValue: "", Key: ""},
+				{Name: "created_at", Type: "timestamp", DefaultValue: "", Key: ""},
+			},
+			expectedError: false,
+		},
+		{
+			name: "测试混合情况：有 DEFAULT 和没有 DEFAULT 的列",
+			schema: "CREATE TABLE `test_table` (\n" +
+				"	`id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
+				"	`name` varchar(100) NOT NULL,\n" +
+				"	`status` varchar(20) NOT NULL DEFAULT 'active',\n" +
+				"	`created_at` timestamp NOT NULL,\n" +
+				"	`updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n" +
+				"	PRIMARY KEY (`id`)\n" +
+				")",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20)", DefaultValue: "", Key: "PRI"},
+				{Name: "name", Type: "varchar(100)", DefaultValue: "", Key: ""},
+				{Name: "status", Type: "varchar(20)", DefaultValue: "active", Key: ""},
+				{Name: "created_at", Type: "timestamp", DefaultValue: "", Key: ""},
+				{Name: "updated_at", Type: "timestamp", DefaultValue: "CURRENT_TIMESTAMP", Key: ""},
+			},
+			expectedError: false,
+		},
+		{
+			name: "测试多列主键",
+			schema: "CREATE TABLE `test_table` (\n" +
+				"	`id` bigint(20) NOT NULL,\n" +
+				"	`user_id` bigint(20) NOT NULL DEFAULT 0,\n" +
+				"	`role_id` bigint(20) NOT NULL DEFAULT 0,\n" +
+				"	PRIMARY KEY (`id`, `user_id`)\n" +
+				")",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20)", DefaultValue: "", Key: "PRI"},
+				{Name: "user_id", Type: "bigint(20)", DefaultValue: "0", Key: "PRI"},
+				{Name: "role_id", Type: "bigint(20)", DefaultValue: "0", Key: ""},
+			},
+			expectedError: false,
+		},
+		{
+			name: "测试 unsigned 类型",
+			schema: "CREATE TABLE `test_table` (\n" +
+				"	`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n" +
+				"	`value` int(11) unsigned NOT NULL DEFAULT 0,\n" +
+				"	PRIMARY KEY (`id`)\n" +
+				")",
+			expectedCols: []ColumnInfo{
+				{Name: "id", Type: "bigint(20) unsigned", DefaultValue: "", Key: "PRI"},
+				{Name: "value", Type: "int(11) unsigned", DefaultValue: "0", Key: ""},
+			},
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 直接调用函数 getColumnsFroMySQLLikeSchema
+			columns, err := getColumnsFroMySQLLikeSchema(tt.schema)
 
 			// 验证错误
 			if tt.expectedError {

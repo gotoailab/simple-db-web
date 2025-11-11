@@ -16,6 +16,10 @@ func GetDialectByType(dbType string, db mysql.DBAdapter) Dialect {
 		return NewOpenguassDialect(db)
 	case "vastbase":
 		return NewVastbaseDialect(db)
+	case "kingbase":
+		return NewKingbaseDialect(db)
+	case "oceandb":
+		return NewOceandbDialect(db)
 	}
 	return nil
 }

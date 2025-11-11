@@ -20,10 +20,10 @@ func (m *OpenguassDialect) GetTableColumns(tableName string) ([]ColumnInfo, erro
 	if err != nil {
 		return nil, err
 	}
-	return m.getColumnsFromSchema(schema)
+	return getColumnsFroPGLikeSchema(schema)
 }
 
-func (m *OpenguassDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, error) {
+func getColumnsFroPGLikeSchema(schema string) ([]ColumnInfo, error) {
 	columns := []ColumnInfo{}
 
 	// 首先解析主键列名
@@ -74,14 +74,14 @@ func (m *OpenguassDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, er
 			// 检查这个位置是否真的是列定义的开始（前面应该是换行、空格或逗号）
 			before := ""
 			if idx[0] > 0 {
-				before = schema[idx[0]-1:idx[0]]
+				before = schema[idx[0]-1 : idx[0]]
 			}
 			if idx[0] == 0 || before == "\n" || before == "\t" || before == " " || before == "," || before == "(" {
 				colDefStart = idx[0]
 				break
 			}
 		}
-		
+
 		if colDefStart >= 0 {
 			// 从列定义开始查找 DEFAULT（在当前列定义范围内）
 			remaining := schema[colDefStart+len(match[0]):]
@@ -93,22 +93,22 @@ func (m *OpenguassDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, er
 				colDefEnd = nextColMatch[0]
 			}
 			colDefText := remaining[:colDefEnd]
-			
+
 			defaultIdx := strings.Index(colDefText, "DEFAULT")
 			if defaultIdx >= 0 {
 				// 找到 DEFAULT 关键字，提取默认值
 				defaultStart := defaultIdx + len("DEFAULT")
 				defaultValueStr := strings.TrimSpace(colDefText[defaultStart:])
-				
+
 				// 手动解析默认值，正确处理括号嵌套
 				var defaultValue strings.Builder
 				parenCount := 0
 				inString := false
 				stringChar := byte(0)
-				
+
 				for i := 0; i < len(defaultValueStr); i++ {
 					char := defaultValueStr[i]
-					
+
 					// 处理字符串
 					if !inString && (char == '\'' || char == '"') {
 						inString = true
@@ -124,7 +124,7 @@ func (m *OpenguassDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, er
 						}
 					} else {
 						defaultValue.WriteByte(char)
-						
+
 						// 处理括号
 						if !inString {
 							if char == '(' {
@@ -158,12 +158,12 @@ func (m *OpenguassDialect) getColumnsFromSchema(schema string) ([]ColumnInfo, er
 						}
 					}
 				}
-				
+
 				if defaultValue.Len() > 0 {
 					defaultValueStr := strings.TrimSpace(defaultValue.String())
 					// 移除末尾的逗号（如果有）
 					defaultValueStr = strings.TrimRight(defaultValueStr, ",")
-					
+
 					// 处理类型转换，如 '\x'::bytea -> '\x'
 					// 但保留函数调用中的类型转换，如 nextval('...'::regclass) 应该保留
 					if strings.Contains(defaultValueStr, "::") {

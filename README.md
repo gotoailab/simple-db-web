@@ -108,6 +108,15 @@ func (p *PostgreSQL) Connect(dsn string) error {
 - 编辑和删除操作基于主键（PRI）
 - SQL 查询中的字符串值已做基本的转义处理，但建议在生产环境中使用参数化查询
 
+## TODO
+
+- 支持sqlite
+- 支持postgres
+- 支持clickhouse
+- 密码支持显示
+- 刷新支持保持原有连接
+- 支持大模型接入
+
 ## 许可证
 
 MIT

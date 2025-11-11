@@ -13,5 +13,9 @@ func NewVastbaseDialect(db mysql.DBAdapter) *VastbaseDialect {
 }
 
 func (m *VastbaseDialect) GetTableColumns(tableName string) ([]ColumnInfo, error) {
-	return m.BaseDialect.GetTableColumns(tableName)
+	schema, err := m.BaseDialect.GetTableSchema(tableName)
+	if err != nil {
+		return nil, err
+	}
+	return getColumnsFroPGLikeSchema(schema)
 }

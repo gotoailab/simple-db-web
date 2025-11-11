@@ -4,6 +4,9 @@ go 1.23.10
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/jmoiron/sqlx v1.3.5
+	github.com/lib/pq v1.4.0
+	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	ksogit.kingsoft.net/chat/lib v1.0.100-0.20251110092554-b2b95e7e4219
 	ksogit.kingsoft.net/kgo/mysql v0.0.22
 )
@@ -51,7 +54,6 @@ require (
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
-	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect

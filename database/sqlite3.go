@@ -1,0 +1,278 @@
+package database
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+// SQLite3 实现Database接口
+type SQLite3 struct {
+	db *sql.DB
+}
+
+// NewSQLite3 创建SQLite3实例
+func NewSQLite3() *SQLite3 {
+	return &SQLite3{}
+}
+
+// Connect 建立SQLite3连接
+func (s *SQLite3) Connect(dsn string) error {
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return fmt.Errorf("打开数据库连接失败: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("连接数据库失败: %w", err)
+	}
+
+	s.db = db
+	return nil
+}
+
+// Close 关闭连接
+func (s *SQLite3) Close() error {
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
+}
+
+// GetTables 获取所有表名
+func (s *SQLite3) GetTables() ([]string, error) {
+	rows, err := s.db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+	if err != nil {
+		return nil, fmt.Errorf("查询表列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return nil, err
+		}
+		tables = append(tables, tableName)
+	}
+	return tables, rows.Err()
+}
+
+// GetTableSchema 获取表结构
+func (s *SQLite3) GetTableSchema(tableName string) (string, error) {
+	rows, err := s.db.Query(fmt.Sprintf("SELECT sql FROM sqlite_master WHERE type='table' AND name='%s'", tableName))
+	if err != nil {
+		return "", fmt.Errorf("查询表结构失败: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return "", fmt.Errorf("表 %s 不存在", tableName)
+	}
+
+	var createTable string
+	if err := rows.Scan(&createTable); err != nil {
+		return "", err
+	}
+
+	return createTable, nil
+}
+
+// GetTableColumns 获取表的列信息
+func (s *SQLite3) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+	query := fmt.Sprintf("PRAGMA table_info(`%s`)", tableName)
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("查询列信息失败: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []ColumnInfo
+	for rows.Next() {
+		var col ColumnInfo
+		var cid int
+		var notnull, pk int
+		var defaultVal sql.NullString
+
+		if err := rows.Scan(&cid, &col.Name, &col.Type, &notnull, &defaultVal, &pk); err != nil {
+			return nil, err
+		}
+
+		col.Nullable = (notnull == 0)
+		if pk == 1 {
+			col.Key = "PRI"
+		}
+		if defaultVal.Valid {
+			col.DefaultValue = defaultVal.String
+		}
+
+		columns = append(columns, col)
+	}
+	return columns, rows.Err()
+}
+
+// ExecuteQuery 执行查询
+func (s *SQLite3) ExecuteQuery(query string) ([]map[string]interface{}, error) {
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("执行查询失败: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var results = make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, err
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	return results, rows.Err()
+}
+
+// ExecuteUpdate 执行更新
+func (s *SQLite3) ExecuteUpdate(query string) (int64, error) {
+	result, err := s.db.Exec(query)
+	if err != nil {
+		return 0, fmt.Errorf("执行更新失败: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// ExecuteDelete 执行删除
+func (s *SQLite3) ExecuteDelete(query string) (int64, error) {
+	result, err := s.db.Exec(query)
+	if err != nil {
+		return 0, fmt.Errorf("执行删除失败: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// ExecuteInsert 执行插入
+func (s *SQLite3) ExecuteInsert(query string) (int64, error) {
+	result, err := s.db.Exec(query)
+	if err != nil {
+		return 0, fmt.Errorf("执行插入失败: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// GetTableData 获取表数据（分页）
+func (s *SQLite3) GetTableData(tableName string, page, pageSize int) ([]map[string]interface{}, int64, error) {
+	// 获取总数
+	var total int64
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", tableName)
+	if err := s.db.QueryRow(countQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询总数失败: %w", err)
+	}
+
+	// 获取分页数据
+	offset := (page - 1) * pageSize
+	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT %d OFFSET %d", tableName, pageSize, offset)
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, 0, fmt.Errorf("查询数据失败: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var results = make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, 0, err
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else if val == nil {
+				row[col] = nil
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	return results, total, rows.Err()
+}
+
+// GetDatabases SQLite3不支持多数据库，返回空列表
+func (s *SQLite3) GetDatabases() ([]string, error) {
+	return []string{}, nil
+}
+
+// SwitchDatabase SQLite3不支持切换数据库
+func (s *SQLite3) SwitchDatabase(databaseName string) error {
+	return fmt.Errorf("SQLite3不支持切换数据库")
+}
+
+// BuildSQLite3DSN 根据连接信息构建SQLite3 DSN
+func BuildSQLite3DSN(info ConnectionInfo) string {
+	if info.DSN != "" {
+		return info.DSN
+	}
+
+	// SQLite3 DSN格式: file:path/to/database.db
+	// 如果提供了Database字段，使用它作为文件路径
+	// 否则使用Host字段作为文件路径
+	var dsn string
+	if info.Database != "" {
+		dsn = info.Database
+	} else if info.Host != "" {
+		dsn = info.Host
+	} else {
+		dsn = ":memory:" // 默认使用内存数据库
+	}
+
+	// SQLite3支持查询参数
+	params := []string{}
+	if info.User != "" {
+		params = append(params, fmt.Sprintf("_auth_user=%s", info.User))
+	}
+	if info.Password != "" {
+		params = append(params, fmt.Sprintf("_auth_pass=%s", info.Password))
+	}
+
+	if len(params) > 0 {
+		dsn += "?" + strings.Join(params, "&")
+	}
+
+	return dsn
+}

@@ -1,0 +1,340 @@
+package database
+
+import (
+	"database/sql"
+	"fmt"
+
+	_ "github.com/lib/pq"
+)
+
+// PostgreSQL 实现Database接口
+type PostgreSQL struct {
+	db *sql.DB
+}
+
+// NewPostgreSQL 创建PostgreSQL实例
+func NewPostgreSQL() *PostgreSQL {
+	return &PostgreSQL{}
+}
+
+// Connect 建立PostgreSQL连接
+func (p *PostgreSQL) Connect(dsn string) error {
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return fmt.Errorf("打开数据库连接失败: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("连接数据库失败: %w", err)
+	}
+
+	p.db = db
+	return nil
+}
+
+// Close 关闭连接
+func (p *PostgreSQL) Close() error {
+	if p.db != nil {
+		return p.db.Close()
+	}
+	return nil
+}
+
+// GetTables 获取所有表名
+func (p *PostgreSQL) GetTables() ([]string, error) {
+	query := `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("查询表列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return nil, err
+		}
+		tables = append(tables, tableName)
+	}
+	return tables, rows.Err()
+}
+
+// GetTableSchema 获取表结构
+func (p *PostgreSQL) GetTableSchema(tableName string) (string, error) {
+	query := fmt.Sprintf(`
+		SELECT 
+			'CREATE TABLE ' || quote_ident('%s') || ' (' || 
+			string_agg(
+				quote_ident(column_name) || ' ' || 
+				udt_name || 
+				CASE 
+					WHEN character_maximum_length IS NOT NULL THEN '(' || character_maximum_length || ')'
+					ELSE ''
+				END ||
+				CASE 
+					WHEN is_nullable = 'NO' THEN ' NOT NULL'
+					ELSE ''
+				END ||
+				CASE 
+					WHEN column_default IS NOT NULL THEN ' DEFAULT ' || column_default
+					ELSE ''
+				END,
+				', '
+			) || ');' as create_table
+		FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = '%s'
+		GROUP BY table_name;
+	`, tableName, tableName)
+
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return "", fmt.Errorf("查询表结构失败: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return "", fmt.Errorf("表 %s 不存在", tableName)
+	}
+
+	var createTable string
+	if err := rows.Scan(&createTable); err != nil {
+		return "", err
+	}
+
+	return createTable, nil
+}
+
+// GetTableColumns 获取表的列信息
+func (p *PostgreSQL) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+	query := fmt.Sprintf(`
+		SELECT 
+			column_name,
+			udt_name as data_type,
+			is_nullable,
+			column_default,
+			CASE 
+				WHEN constraint_type = 'PRIMARY KEY' THEN 'PRI'
+				WHEN constraint_type = 'UNIQUE' THEN 'UNI'
+				ELSE ''
+			END as key_type
+		FROM information_schema.columns c
+		LEFT JOIN (
+			SELECT 
+				kcu.column_name,
+				tc.constraint_type
+			FROM information_schema.table_constraints tc
+			JOIN information_schema.key_column_usage kcu 
+				ON tc.constraint_name = kcu.constraint_name
+			WHERE tc.table_schema = 'public' 
+				AND tc.table_name = '%s'
+		) k ON c.column_name = k.column_name
+		WHERE c.table_schema = 'public' AND c.table_name = '%s'
+		ORDER BY c.ordinal_position;
+	`, tableName, tableName)
+
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("查询列信息失败: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []ColumnInfo
+	for rows.Next() {
+		var col ColumnInfo
+		var nullable string
+		var defaultVal sql.NullString
+		var keyType sql.NullString
+
+		if err := rows.Scan(&col.Name, &col.Type, &nullable, &defaultVal, &keyType); err != nil {
+			return nil, err
+		}
+
+		col.Nullable = (nullable == "YES")
+		if keyType.Valid {
+			col.Key = keyType.String
+		}
+		if defaultVal.Valid {
+			col.DefaultValue = defaultVal.String
+		}
+
+		columns = append(columns, col)
+	}
+	return columns, rows.Err()
+}
+
+// ExecuteQuery 执行查询
+func (p *PostgreSQL) ExecuteQuery(query string) ([]map[string]interface{}, error) {
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("执行查询失败: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var results = make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, err
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	return results, rows.Err()
+}
+
+// ExecuteUpdate 执行更新
+func (p *PostgreSQL) ExecuteUpdate(query string) (int64, error) {
+	result, err := p.db.Exec(query)
+	if err != nil {
+		return 0, fmt.Errorf("执行更新失败: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// ExecuteDelete 执行删除
+func (p *PostgreSQL) ExecuteDelete(query string) (int64, error) {
+	result, err := p.db.Exec(query)
+	if err != nil {
+		return 0, fmt.Errorf("执行删除失败: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// ExecuteInsert 执行插入
+func (p *PostgreSQL) ExecuteInsert(query string) (int64, error) {
+	result, err := p.db.Exec(query)
+	if err != nil {
+		return 0, fmt.Errorf("执行插入失败: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// GetTableData 获取表数据（分页）
+func (p *PostgreSQL) GetTableData(tableName string, page, pageSize int) ([]map[string]interface{}, int64, error) {
+	// 获取总数
+	var total int64
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM "%s"`, tableName)
+	if err := p.db.QueryRow(countQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询总数失败: %w", err)
+	}
+
+	// 获取分页数据
+	offset := (page - 1) * pageSize
+	query := fmt.Sprintf(`SELECT * FROM "%s" LIMIT %d OFFSET %d`, tableName, pageSize, offset)
+
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, 0, fmt.Errorf("查询数据失败: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var results = make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, 0, err
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else if val == nil {
+				row[col] = nil
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	return results, total, rows.Err()
+}
+
+// GetDatabases 获取所有数据库名称
+func (p *PostgreSQL) GetDatabases() ([]string, error) {
+	query := `SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres' ORDER BY datname`
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("查询数据库列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var dbName string
+		if err := rows.Scan(&dbName); err != nil {
+			return nil, err
+		}
+		databases = append(databases, dbName)
+	}
+	return databases, rows.Err()
+}
+
+// SwitchDatabase 切换当前使用的数据库
+func (p *PostgreSQL) SwitchDatabase(databaseName string) error {
+	// PostgreSQL需要重新连接才能切换数据库
+	// 这里我们关闭当前连接，调用者需要重新连接
+	return fmt.Errorf("PostgreSQL切换数据库需要重新连接，请使用新的连接信息重新连接")
+}
+
+// BuildPostgreSQLDSN 根据连接信息构建PostgreSQL DSN
+func BuildPostgreSQLDSN(info ConnectionInfo) string {
+	if info.DSN != "" {
+		return info.DSN
+	}
+
+	// PostgreSQL DSN格式: postgres://user:password@host:port/database?sslmode=disable
+	// 或者使用 lib/pq 格式: host=host port=port user=user password=password dbname=database sslmode=disable
+	var dsn string
+	if info.Database != "" {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+			info.Host,
+			info.Port,
+			info.User,
+			info.Password,
+			info.Database,
+		)
+	} else {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=disable",
+			info.Host,
+			info.Port,
+			info.User,
+			info.Password,
+		)
+	}
+
+	return dsn
+}

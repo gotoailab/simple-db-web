@@ -10,7 +10,7 @@ import (
 	"ksogit.kingsoft.net/kgo/mysql"
 )
 
-type BaseKingsoftDB struct {
+type BaseMysqlBasedDB struct {
 	db      mysql.DBAdapter
 	dialect Dialect
 
@@ -18,12 +18,12 @@ type BaseKingsoftDB struct {
 	dialectType string
 }
 
-func NewKingsoftDB(dialectType string) *BaseKingsoftDB {
-	return &BaseKingsoftDB{dialectType: dialectType}
+func NewKingsoftDB(dialectType string) *BaseMysqlBasedDB {
+	return &BaseMysqlBasedDB{dialectType: dialectType}
 }
 
 // Connect 建立MySQL连接
-func (m *BaseKingsoftDB) Connect(dsn string) error {
+func (m *BaseMysqlBasedDB) Connect(dsn string) error {
 	dbConfig, err := xmysql.GetDatabaseFromDSN(dsn)
 	if err != nil {
 		return err
@@ -35,7 +35,7 @@ func formatDSN(dbConfig *xmysql.Database) string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbConfig.UserName, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.DBName)
 }
 
-func (m *BaseKingsoftDB) ConnectWithConfig(dbConfig *xmysql.Database) error {
+func (m *BaseMysqlBasedDB) ConnectWithConfig(dbConfig *xmysql.Database) error {
 	db, err := xmysqlv2.NewDBBuilder(dbConfig, &xmysqlv2.ServiceInfo{
 		LocalEnv:    "local",
 		DeployEnv:   "prod",
@@ -54,7 +54,7 @@ func (m *BaseKingsoftDB) ConnectWithConfig(dbConfig *xmysql.Database) error {
 }
 
 // Close 关闭连接
-func (m *BaseKingsoftDB) Close() error {
+func (m *BaseMysqlBasedDB) Close() error {
 	if m.db != nil {
 		m.db.Close()
 	}
@@ -62,22 +62,22 @@ func (m *BaseKingsoftDB) Close() error {
 }
 
 // GetTables 获取所有表名
-func (m *BaseKingsoftDB) GetTables() ([]string, error) {
+func (m *BaseMysqlBasedDB) GetTables() ([]string, error) {
 	return m.dialect.GetTables()
 }
 
 // GetTableSchema 获取表结构
-func (m *BaseKingsoftDB) GetTableSchema(tableName string) (string, error) {
+func (m *BaseMysqlBasedDB) GetTableSchema(tableName string) (string, error) {
 	return m.dialect.GetTableSchema(tableName)
 }
 
 // GetTableColumns 获取表的列信息
-func (m *BaseKingsoftDB) GetTableColumns(tableName string) ([]ColumnInfo, error) {
+func (m *BaseMysqlBasedDB) GetTableColumns(tableName string) ([]ColumnInfo, error) {
 	return m.dialect.GetTableColumns(tableName)
 }
 
 // ExecuteQuery 执行查询
-func (m *BaseKingsoftDB) ExecuteQuery(query string) ([]map[string]interface{}, error) {
+func (m *BaseMysqlBasedDB) ExecuteQuery(query string) ([]map[string]interface{}, error) {
 	var rows = make([]map[string]interface{}, 0)
 	sqlxDB, err := sqlx.Open("mysql", formatDSN(m.dbConfig))
 	if err != nil {
@@ -105,7 +105,7 @@ func (m *BaseKingsoftDB) ExecuteQuery(query string) ([]map[string]interface{}, e
 }
 
 // ExecuteDelete 执行删除
-func (m *BaseKingsoftDB) ExecuteDelete(query string) (int64, error) {
+func (m *BaseMysqlBasedDB) ExecuteDelete(query string) (int64, error) {
 	res, err := m.db.Exec(query)
 	if err != nil {
 		return 0, fmt.Errorf("执行删除失败: %w", err)
@@ -114,7 +114,7 @@ func (m *BaseKingsoftDB) ExecuteDelete(query string) (int64, error) {
 }
 
 // ExecuteInsert 执行插入
-func (m *BaseKingsoftDB) ExecuteInsert(query string) (int64, error) {
+func (m *BaseMysqlBasedDB) ExecuteInsert(query string) (int64, error) {
 	res, err := m.db.Exec(query)
 	if err != nil {
 		return 0, fmt.Errorf("执行插入失败: %w", err)
@@ -122,7 +122,7 @@ func (m *BaseKingsoftDB) ExecuteInsert(query string) (int64, error) {
 	return res.RowsAffected, nil
 }
 
-func (m *BaseKingsoftDB) ExecuteUpdate(query string) (int64, error) {
+func (m *BaseMysqlBasedDB) ExecuteUpdate(query string) (int64, error) {
 	res, err := m.db.Exec(query)
 	if err != nil {
 		return 0, fmt.Errorf("执行更新失败: %w", err)
@@ -131,7 +131,7 @@ func (m *BaseKingsoftDB) ExecuteUpdate(query string) (int64, error) {
 }
 
 // GetTableData 获取表数据（分页）
-func (m *BaseKingsoftDB) GetTableData(tableName string, page, pageSize int) ([]map[string]interface{}, int64, error) {
+func (m *BaseMysqlBasedDB) GetTableData(tableName string, page, pageSize int) ([]map[string]interface{}, int64, error) {
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", tableName)
 	total, err := m.db.QueryInt64(countQuery)
 	if err != nil {
@@ -166,12 +166,12 @@ func (m *BaseKingsoftDB) GetTableData(tableName string, page, pageSize int) ([]m
 }
 
 // GetDatabases 获取所有数据库名称
-func (m *BaseKingsoftDB) GetDatabases() ([]string, error) {
+func (m *BaseMysqlBasedDB) GetDatabases() ([]string, error) {
 	return m.dialect.GetDatabases()
 }
 
 // SwitchDatabase 切换当前使用的数据库
-func (m *BaseKingsoftDB) SwitchDatabase(databaseName string) error {
+func (m *BaseMysqlBasedDB) SwitchDatabase(databaseName string) error {
 	m.dbConfig.DBName = databaseName
 	return m.ConnectWithConfig(m.dbConfig)
 }

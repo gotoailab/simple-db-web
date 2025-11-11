@@ -8,22 +8,14 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- 顶部导航栏 -->
-        <header class="header">
-            <div class="header-content">
+        <!-- 左侧边栏 -->
+        <aside class="sidebar">
+            <!-- Logo -->
+            <div class="sidebar-header">
                 <h1 class="logo">SimpleDB</h1>
-                <div class="connection-status" id="connectionStatus">
-                    <span class="status-indicator disconnected"></span>
-                    <span>未连接</span>
-                </div>
             </div>
-        </header>
-
-        <!-- 主内容区 -->
-        <div class="main-content">
-            <!-- 左侧边栏 -->
-            <aside class="sidebar">
-                <!-- 连接面板 -->
+            
+            <!-- 连接面板 -->
                 <div class="panel connection-panel" id="connectionPanel">
                     <h2 class="panel-title">连接数据库</h2>
                     <form id="connectionForm" class="connection-form">
@@ -105,9 +97,21 @@
                     </div>
                     <ul class="table-list" id="tableList"></ul>
                 </div>
-            </aside>
+        </aside>
 
-            <!-- 右侧内容区 -->
+        <!-- 右侧内容区 -->
+        <div class="right-panel">
+            <!-- 顶部导航栏 -->
+            <header class="header">
+                <div class="header-content">
+                    <div class="connection-status" id="connectionStatus">
+                        <span class="status-indicator disconnected"></span>
+                        <span>未连接</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 主内容区 -->
             <main class="content-area">
                 <!-- 标签页导航 -->
                 <div class="tabs" id="tabs">
@@ -150,16 +154,16 @@
                     <div class="query-results" id="queryResults"></div>
                 </div>
             </main>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <div class="footer-content">
+                    <p>&copy; 2024 SimpleDB. All rights reserved.</p>
+                    <p>Simple Database Management Tool</p>
+                </div>
+            </footer>
         </div>
     </div>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-content">
-            <p>&copy; 2024 SimpleDB. All rights reserved.</p>
-            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">Simple Database Management Tool</p>
-        </div>
-    </footer>
 
     <!-- 删除连接确认模态框 -->
     <div class="modal" id="deleteConnectionModal" style="display: none;">

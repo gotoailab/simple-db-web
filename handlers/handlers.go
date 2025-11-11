@@ -19,6 +19,7 @@ import (
 // ConnectionSession 连接会话信息
 type ConnectionSession struct {
 	db              database.Database
+	dbType          string // 数据库类型，用于前端判断
 	currentDatabase string
 	currentTable    string
 	createdAt       time.Time
@@ -59,6 +60,7 @@ func NewServer() (*Server, error) {
 		"postgres":   "PostgreSQL",
 		"postgresql": "PostgreSQL",
 		"sqlite":     "SQLite",
+		"clickhouse": "ClickHouse",
 		"dameng":     "达梦",
 		"openguass":  "OpenGauss",
 		"vastbase":   "Vastbase",
@@ -191,6 +193,8 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		switch info.Type {
 		case "mysql":
 			db = database.NewMySQL()
+		case "clickhouse":
+			db = database.NewClickHouse()
 		case "dameng":
 			db = database.NewBaseMysqlBasedDB("dameng")
 		case "openguass":
@@ -212,7 +216,12 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 构建DSN
-	dsn := database.BuildDSN(info)
+	var dsn string
+	if info.Type == "clickhouse" {
+		dsn = database.BuildClickHouseDSN(info)
+	} else {
+		dsn = database.BuildDSN(info)
+	}
 	if err := db.Connect(dsn); err != nil {
 		http.Error(w, fmt.Sprintf("连接失败: %v", err), http.StatusInternalServerError)
 		return
@@ -221,6 +230,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	// 创建会话
 	session := &ConnectionSession{
 		db:              db,
+		dbType:          info.Type,
 		currentDatabase: "",
 		currentTable:    "",
 		createdAt:       time.Now(),
@@ -385,15 +395,19 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 检查是否为 ClickHouse（不支持分页）
+	isClickHouse := session.dbType == "clickhouse"
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
 			"data":    data,
 			"columns": columns,
 		},
-		"total":    total,
-		"page":     page,
-		"pageSize": pageSize,
+		"total":        total,
+		"page":         page,
+		"pageSize":     pageSize,
+		"isClickHouse": isClickHouse, // 标识是否为 ClickHouse
 	})
 }
 
@@ -489,6 +503,18 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// ClickHouse 不支持 UPDATE 操作
+	if session.dbType == "clickhouse" {
+		http.Error(w, "ClickHouse 不支持 UPDATE 操作", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
 		Table string                 `json:"table"`
 		Data  map[string]interface{} `json:"data"`
@@ -502,12 +528,6 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 
 	if req.Table == "" {
 		http.Error(w, "表名不能为空", http.StatusBadRequest)
-		return
-	}
-
-	session, err := s.getSession(connectionID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -571,6 +591,18 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// ClickHouse 不支持 DELETE 操作
+	if session.dbType == "clickhouse" {
+		http.Error(w, "ClickHouse 不支持 DELETE 操作", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
 		Table string                 `json:"table"`
 		Where map[string]interface{} `json:"where"`
@@ -583,12 +615,6 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 
 	if req.Table == "" {
 		http.Error(w, "表名不能为空", http.StatusBadRequest)
-		return
-	}
-
-	session, err := s.getSession(connectionID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -801,7 +827,7 @@ func (s *Server) RegisterRoutes(router Router) {
 
 	// 静态文件 - 使用 embed.FS
 	router.StaticFS("/static/", staticFS)
-	
+
 	// 获取数据库类型列表
 	router.HandleFunc("/api/database/types", s.GetDatabaseTypes)
 }

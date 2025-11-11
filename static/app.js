@@ -6,6 +6,7 @@ let currentRowData = null;
 let currentDeleteWhere = null;
 let connectionId = null; // 当前连接的ID
 let connectionInfo = null; // 当前连接信息
+let currentDbType = null; // 当前数据库类型
 
 // DOM元素
 const connectionStatus = document.getElementById('connectionStatus');
@@ -301,6 +302,7 @@ async function connectWithSavedConnection(savedConn) {
                 dsn: savedConn.dsn || ''
             };
             connectionInfo = connInfo;
+            currentDbType = savedConn.type || 'mysql'; // 保存数据库类型
             sessionStorage.setItem('currentConnectionId', connectionId);
             sessionStorage.setItem('currentConnectionInfo', JSON.stringify(connInfo));
             updateConnectionStatus(true);
@@ -488,6 +490,7 @@ async function restoreConnection() {
             connectionId = savedConnectionId;
             if (savedConnectionInfo) {
                 connectionInfo = JSON.parse(savedConnectionInfo);
+                currentDbType = data.dbType || connectionInfo.type || null; // 恢复数据库类型
                 updateConnectionInfo(connectionInfo);
             }
             // 有活动的连接，恢复UI状态
@@ -576,6 +579,7 @@ connectionForm.addEventListener('submit', async (e) => {
                 dsn: mode === 'dsn' ? document.getElementById('dsn').value : ''
             };
             connectionInfo = connInfo;
+            currentDbType = dbType; // 保存数据库类型
             sessionStorage.setItem('currentConnectionId', connectionId);
             sessionStorage.setItem('currentConnectionInfo', JSON.stringify(connInfo));
             updateConnectionStatus(true);
@@ -951,8 +955,10 @@ async function loadTableData() {
                 dataByColumns.push(rowByColumns);
             });
 
-            displayTableData(dataByColumns, data.total);
-            updatePagination(data.total, data.page, data.pageSize);
+            // 检查是否为 ClickHouse
+            const isClickHouse = data.isClickHouse || false;
+            displayTableData(dataByColumns, data.total, isClickHouse);
+            updatePagination(data.total, data.page, data.pageSize, isClickHouse);
         }
     } catch (error) {
         showNotification('加载数据失败: ' + error.message, 'error');
@@ -963,7 +969,7 @@ async function loadTableData() {
 }
 
 // 显示表数据
-function displayTableData(rows, total) {
+function displayTableData(rows, total, isClickHouse = false) {
     // 清空表格内容，避免DOM操作冲突
     while (dataTableHead.firstChild) {
         dataTableHead.removeChild(dataTableHead.firstChild);
@@ -1007,10 +1013,13 @@ function displayTableData(rows, total) {
         th.textContent = col;
         headRow.appendChild(th);
     });
-    const actionTh = document.createElement('th');
-    actionTh.style.width = '150px';
-    actionTh.textContent = '操作';
-    headRow.appendChild(actionTh);
+    // ClickHouse 不显示操作列
+    if (!isClickHouse) {
+        const actionTh = document.createElement('th');
+        actionTh.style.width = '150px';
+        actionTh.textContent = '操作';
+        headRow.appendChild(actionTh);
+    }
     dataTableHead.appendChild(headRow);
     
     // 创建表体
@@ -1032,21 +1041,23 @@ function displayTableData(rows, total) {
             bodyRow.appendChild(td);
         });
         
-        // 添加操作列
-        const actionTd = document.createElement('td');
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn btn-secondary action-btn edit-row-btn';
-        editBtn.textContent = '编辑';
-        editBtn.dataset.row = JSON.stringify(row);
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn btn-danger action-btn delete-row-btn';
-        deleteBtn.textContent = '删除';
-        deleteBtn.dataset.row = JSON.stringify(row);
-        
-        actionTd.appendChild(editBtn);
-        actionTd.appendChild(deleteBtn);
-        bodyRow.appendChild(actionTd);
+        // ClickHouse 不显示操作列
+        if (!isClickHouse) {
+            const actionTd = document.createElement('td');
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-secondary action-btn edit-row-btn';
+            editBtn.textContent = '编辑';
+            editBtn.dataset.row = JSON.stringify(row);
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-danger action-btn delete-row-btn';
+            deleteBtn.textContent = '删除';
+            deleteBtn.dataset.row = JSON.stringify(row);
+            
+            actionTd.appendChild(editBtn);
+            actionTd.appendChild(deleteBtn);
+            bodyRow.appendChild(actionTd);
+        }
         
         dataTableBody.appendChild(bodyRow);
     });
@@ -1068,7 +1079,14 @@ function displayTableData(rows, total) {
 }
 
 // 更新分页
-function updatePagination(total, page, pageSize) {
+function updatePagination(total, page, pageSize, isClickHouse = false) {
+    if (isClickHouse) {
+        // ClickHouse 不支持分页，只显示提示信息
+        paginationInfo.textContent = `显示前 10 条数据（ClickHouse 不支持分页）`;
+        pagination.innerHTML = '';
+        return;
+    }
+    
     const totalPages = Math.ceil(total / pageSize);
     
     paginationInfo.textContent = `共 ${total} 条，第 ${page}/${totalPages} 页`;

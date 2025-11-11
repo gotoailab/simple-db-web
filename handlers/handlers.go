@@ -67,15 +67,15 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	case "mysql":
 		db = database.NewMySQL()
 	case "dameng":
-		db = database.NewKingsoftDB("dameng")
+		db = database.NewBaseMysqlBasedDB("dameng")
 	case "openguass":
-		db = database.NewKingsoftDB("openguass")
+		db = database.NewBaseMysqlBasedDB("openguass")
 	case "vastbase":
-		db = database.NewKingsoftDB("vastbase")
+		db = database.NewBaseMysqlBasedDB("vastbase")
 	case "kingbase":
-		db = database.NewKingsoftDB("kingbase")
+		db = database.NewBaseMysqlBasedDB("kingbase")
 	case "oceandb":
-		db = database.NewKingsoftDB("oceandb")
+		db = database.NewBaseMysqlBasedDB("oceandb")
 	case "sqlite":
 		db = database.NewSQLite3()
 	case "postgres":

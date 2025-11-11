@@ -18,7 +18,7 @@ type BaseMysqlBasedDB struct {
 	dialectType string
 }
 
-func NewKingsoftDB(dialectType string) *BaseMysqlBasedDB {
+func NewBaseMysqlBasedDB(dialectType string) *BaseMysqlBasedDB {
 	return &BaseMysqlBasedDB{dialectType: dialectType}
 }
 

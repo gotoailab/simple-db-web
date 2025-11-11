@@ -27,6 +27,12 @@ const rememberConnection = document.getElementById('rememberConnection');
 const savedConnectionsPanel = document.getElementById('savedConnectionsPanel');
 const savedConnectionsList = document.getElementById('savedConnectionsList');
 const clearSavedConnections = document.getElementById('clearSavedConnections');
+// Loading 元素
+const dataLoading = document.getElementById('dataLoading');
+const schemaLoading = document.getElementById('schemaLoading');
+const queryLoading = document.getElementById('queryLoading');
+const databaseLoading = document.getElementById('databaseLoading');
+const tablesLoading = document.getElementById('tablesLoading');
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 const dataTab = document.getElementById('dataTab');
@@ -271,6 +277,8 @@ async function connectWithSavedConnection(savedConn) {
     }
     
     // 直接执行连接逻辑，避免重复提交
+    const connectBtn = connectionForm.querySelector('button[type="submit"]');
+    setButtonLoading(connectBtn, true);
     try {
         const response = await fetch('/api/connect', {
             method: 'POST',
@@ -328,6 +336,8 @@ async function connectWithSavedConnection(savedConn) {
         }
     } catch (error) {
         showNotification('连接失败: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(connectBtn, false);
     }
 }
 
@@ -384,6 +394,30 @@ closeClearAllConnectionsModal.addEventListener('click', () => {
 
 // 存储数据库类型列表
 let databaseTypes = [];
+
+// Loading 控制函数
+function showLoading(element) {
+    if (element) {
+        element.style.display = 'flex';
+    }
+}
+
+function hideLoading(element) {
+    if (element) {
+        element.style.display = 'none';
+    }
+}
+
+function setButtonLoading(button, loading) {
+    if (!button) return;
+    if (loading) {
+        button.classList.add('loading');
+        button.disabled = true;
+    } else {
+        button.classList.remove('loading');
+        button.disabled = false;
+    }
+}
 
 // 加载数据库类型列表
 async function loadDatabaseTypes() {
@@ -585,6 +619,8 @@ connectionForm.addEventListener('submit', async (e) => {
         }
     } catch (error) {
         showNotification('连接失败: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(connectBtn, false);
     }
 });
 
@@ -668,6 +704,7 @@ async function loadDatabases(databases) {
         });
     } else {
         // 如果没有数据库列表,尝试从服务器获取
+        showLoading(databaseLoading);
         try {
             const headers = {};
             if (connectionId) {
@@ -687,6 +724,8 @@ async function loadDatabases(databases) {
             }
         } catch (error) {
             showNotification('获取数据库列表失败: ' + error.message, 'error');
+        } finally {
+            hideLoading(databaseLoading);
         }
     }
 }
@@ -699,6 +738,8 @@ async function switchDatabase(databaseName) {
         return;
     }
     
+    showLoading(tablesLoading);
+    setButtonLoading(databaseSelect, true);
     try {
         const headers = {
             'Content-Type': 'application/json'
@@ -727,6 +768,9 @@ async function switchDatabase(databaseName) {
         }
     } catch (error) {
         showNotification('切换数据库失败: ' + error.message, 'error');
+    } finally {
+        hideLoading(tablesLoading);
+        setButtonLoading(databaseSelect, false);
     }
 }
 
@@ -771,6 +815,7 @@ tableFilter.addEventListener('input', filterTables);
 
 // 断开连接
 disconnectBtn.addEventListener('click', async () => {
+    setButtonLoading(disconnectBtn, true);
     try {
         const headers = {
             'Content-Type': 'application/json'
@@ -809,11 +854,15 @@ disconnectBtn.addEventListener('click', async () => {
         }
     } catch (error) {
         showNotification('断开连接失败: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(disconnectBtn, false);
     }
 });
 
 // 加载表列表
 async function loadTables() {
+    showLoading(tablesLoading);
+    setButtonLoading(refreshTables, true);
     try {
         const headers = {};
         if (connectionId) {
@@ -829,6 +878,9 @@ async function loadTables() {
         }
     } catch (error) {
         showNotification('加载表列表失败: ' + error.message, 'error');
+    } finally {
+        hideLoading(tablesLoading);
+        setButtonLoading(refreshTables, false);
     }
 }
 
@@ -850,8 +902,11 @@ async function selectTable(tableName) {
     
     // 切换到数据标签页
     switchTab('data');
-    await loadTableData();
-    await loadTableSchema();
+    // 并行加载数据和结构
+    await Promise.all([
+        loadTableData(),
+        loadTableSchema()
+    ]);
 }
 
 // 存储列信息（用于排序）
@@ -861,6 +916,8 @@ let currentColumns = [];
 async function loadTableData() {
     if (!currentTable) return;
     
+    showLoading(dataLoading);
+    setButtonLoading(refreshData, true);
     try {
         const headers = {};
         if (connectionId) {
@@ -899,6 +956,9 @@ async function loadTableData() {
         }
     } catch (error) {
         showNotification('加载数据失败: ' + error.message, 'error');
+    } finally {
+        hideLoading(dataLoading);
+        setButtonLoading(refreshData, false);
     }
 }
 
@@ -1037,6 +1097,7 @@ refreshData.addEventListener('click', loadTableData);
 async function loadTableSchema() {
     if (!currentTable) return;
     
+    showLoading(schemaLoading);
     try {
         const headers = {};
         if (connectionId) {
@@ -1052,6 +1113,8 @@ async function loadTableSchema() {
         }
     } catch (error) {
         showNotification('加载表结构失败: ' + error.message, 'error');
+    } finally {
+        hideLoading(schemaLoading);
     }
 }
 
@@ -1083,6 +1146,8 @@ executeQuery.addEventListener('click', async () => {
         return;
     }
     
+    showLoading(queryLoading);
+    setButtonLoading(executeQuery, true);
     try {
         const headers = {
             'Content-Type': 'application/json'
@@ -1111,6 +1176,9 @@ executeQuery.addEventListener('click', async () => {
         }
     } catch (error) {
         queryResults.innerHTML = `<div class="query-message error">执行失败: ${error.message}</div>`;
+    } finally {
+        hideLoading(queryLoading);
+        setButtonLoading(executeQuery, false);
     }
 });
 
@@ -1281,6 +1349,7 @@ window.deleteRow = function(rowData) {
 confirmDelete.addEventListener('click', async () => {
     if (!currentTable || !currentDeleteWhere) return;
     
+    setButtonLoading(confirmDelete, true);
     try {
         const headers = {
             'Content-Type': 'application/json'
@@ -1308,6 +1377,8 @@ confirmDelete.addEventListener('click', async () => {
         }
     } catch (error) {
         showNotification('删除失败: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(confirmDelete, false);
     }
 });
 

@@ -75,7 +75,10 @@
                         <button class="btn btn-secondary" id="disconnectBtn"
                             style="font-size: 0.875rem; padding: 0.25rem 0.5rem; margin-bottom: 16px;">断开连接</button>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position: relative;">
+                        <div class="loading-overlay-small" id="databaseLoading" style="display: none;">
+                            <div class="loading-spinner-small"></div>
+                        </div>
                         <select id="databaseSelect" class="form-control">
                             <option value="">请选择数据库...</option>
                         </select>
@@ -92,7 +95,12 @@
                     <div class="form-group" style="margin-bottom: 0.5rem;">
                         <input type="text" id="tableFilter" class="form-control" placeholder="筛选表名..." style="margin-bottom: 0;">
                     </div>
-                    <ul class="table-list" id="tableList"></ul>
+                    <div style="position: relative; min-height: 100px;">
+                        <div class="loading-overlay-small" id="tablesLoading" style="display: none;">
+                            <div class="loading-spinner-small"></div>
+                        </div>
+                        <ul class="table-list" id="tableList"></ul>
+                    </div>
                 </div>
         </aside>
 
@@ -126,7 +134,11 @@
                         <button class="btn btn-secondary" id="refreshData">刷新</button>
                         <div class="pagination-info" id="paginationInfo"></div>
                     </div>
-                    <div class="table-container">
+                    <div class="table-container" style="position: relative;">
+                        <div class="loading-overlay" id="dataLoading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <div class="loading-text">加载中...</div>
+                        </div>
                         <table class="data-table" id="dataTable">
                             <thead id="dataTableHead"></thead>
                             <tbody id="dataTableBody"></tbody>
@@ -137,7 +149,11 @@
 
                 <!-- 结构标签页 -->
                 <div class="tab-content" id="schemaTab">
-                    <div class="code-block">
+                    <div class="code-block" style="position: relative;">
+                        <div class="loading-overlay" id="schemaLoading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <div class="loading-text">加载中...</div>
+                        </div>
                         <pre id="schemaContent"><code>请选择一个表查看结构</code></pre>
                     </div>
                 </div>
@@ -151,7 +167,12 @@
                             <button class="btn btn-secondary" id="clearQuery">清空</button>
                         </div>
                     </div>
-                    <div class="query-results" id="queryResults"></div>
+                    <div class="query-results" id="queryResults" style="position: relative;">
+                        <div class="loading-overlay" id="queryLoading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <div class="loading-text">执行中...</div>
+                        </div>
+                    </div>
                 </div>
             </main>
 

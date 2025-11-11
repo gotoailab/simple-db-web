@@ -1,8 +1,9 @@
 package main
 
 import (
-	"dbweb/handlers"
 	"log"
+
+	"github.com/chenhg5/simple-db-web/handlers"
 )
 
 func main() {

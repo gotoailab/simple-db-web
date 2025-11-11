@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rand"
-	"dbweb/database"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chenhg5/simple-db-web/database"
 )
 
 // ConnectionSession 连接会话信息
@@ -687,25 +688,35 @@ func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// SetupRoutes 设置路由
+// SetupRoutes 设置路由（使用标准库，保持向后兼容）
 func (s *Server) SetupRoutes() {
-	http.HandleFunc("/", s.Home)
-	http.HandleFunc("/api/connect", s.Connect)
-	http.HandleFunc("/api/disconnect", s.Disconnect)
-	http.HandleFunc("/api/status", s.GetStatus)
-	http.HandleFunc("/api/databases", s.GetDatabases)
-	http.HandleFunc("/api/database/switch", s.SwitchDatabase)
-	http.HandleFunc("/api/tables", s.GetTables)
-	http.HandleFunc("/api/table/schema", s.GetTableSchema)
-	http.HandleFunc("/api/table/columns", s.GetTableColumns)
-	http.HandleFunc("/api/table/data", s.GetTableData)
-	http.HandleFunc("/api/query", s.ExecuteQuery)
-	http.HandleFunc("/api/row/update", s.UpdateRow)
-	http.HandleFunc("/api/row/delete", s.DeleteRow)
+	router := NewStandardRouter()
+	s.RegisterRoutes(router)
+}
+
+// RegisterRoutes 注册路由到指定的路由适配器
+// 这个方法支持适配不同的 Web 框架（Gin、Echo、Fiber 等）
+// 如果 router 设置了前缀（通过 SetPrefix 或 NewPrefixRouter），所有路由会自动添加前缀
+func (s *Server) RegisterRoutes(router Router) {
+	// 首页
+	router.HandleFunc("/", s.Home)
+
+	// API 路由
+	router.POST("/api/connect", s.Connect)
+	router.POST("/api/disconnect", s.Disconnect)
+	router.HandleFunc("/api/status", s.GetStatus)
+	router.HandleFunc("/api/databases", s.GetDatabases)
+	router.POST("/api/database/switch", s.SwitchDatabase)
+	router.HandleFunc("/api/tables", s.GetTables)
+	router.HandleFunc("/api/table/schema", s.GetTableSchema)
+	router.HandleFunc("/api/table/columns", s.GetTableColumns)
+	router.HandleFunc("/api/table/data", s.GetTableData)
+	router.POST("/api/query", s.ExecuteQuery)
+	router.POST("/api/row/update", s.UpdateRow)
+	router.POST("/api/row/delete", s.DeleteRow)
 
 	// 静态文件
-	fs := http.FileServer(http.Dir("static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
+	router.Static("/static/", "static")
 }
 
 // Start 启动服务器

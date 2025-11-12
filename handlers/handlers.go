@@ -595,7 +595,6 @@ func (s *Server) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 	s.updateSession(connectionID, func(s *ConnectionSession) {
 		s.currentTable = tableName
 	})
-
 	schema, err := session.db.GetTableSchema(tableName)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取表结构失败: %v", err))

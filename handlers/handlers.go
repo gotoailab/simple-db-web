@@ -311,6 +311,7 @@ func (s *Server) createDatabaseFromSessionData(data *SessionData) (database.Data
 
 // getSession 根据连接ID获取会话
 // 如果内存缓存中没有，会尝试从持久化存储重建
+// 优化：尽量复用内存中的连接，避免频繁重连
 func (s *Server) getSession(connectionID string) (*ConnectionSession, error) {
 	// 从持久化存储获取（这是权威数据源）
 	sessionData, err := s.sessionStorage.Get(connectionID)
@@ -323,38 +324,76 @@ func (s *Server) getSession(connectionID string) (*ConnectionSession, error) {
 	session, exists := s.sessions[connectionID]
 	s.sessionsMutex.RUnlock()
 
-	// 如果内存中存在且数据库一致，直接返回
-	if exists && session != nil && session.currentDatabase == sessionData.CurrentDatabase {
+	// 如果内存中存在且数据库一致，直接返回（最佳情况：无需任何操作）
+	if exists && session != nil && session.db != nil && session.currentDatabase == sessionData.CurrentDatabase {
 		// 确保sessionData引用是最新的
 		session.sessionData = sessionData
+		// 更新当前表（可能在其他请求中被更新）
+		if session.currentTable != sessionData.CurrentTable {
+			session.currentTable = sessionData.CurrentTable
+		}
 		return session, nil
 	}
 
-	// 如果内存中存在但数据库不一致，需要关闭旧连接
-	if exists && session != nil && session.db != nil {
-		session.db.Close()
+	// 如果内存中存在连接但数据库不一致，尝试在现有连接上切换数据库
+	// 注意：对于MySQL等数据库，SwitchDatabase实际上是重连，但至少我们复用了连接对象
+	if exists && session != nil && session.db != nil && session.currentDatabase != sessionData.CurrentDatabase {
+		// 需要切换数据库
+		if sessionData.CurrentDatabase != "" {
+			// 尝试在现有连接上切换数据库
+			if err := session.db.SwitchDatabase(sessionData.CurrentDatabase); err != nil {
+				// 切换失败，关闭旧连接并重建
+				session.db.Close()
+				session.db = nil
+			} else {
+				// 切换成功，更新会话信息
+				s.sessionsMutex.Lock()
+				session.currentDatabase = sessionData.CurrentDatabase
+				session.currentTable = sessionData.CurrentTable
+				session.sessionData = sessionData
+				s.sessionsMutex.Unlock()
+				return session, nil
+			}
+		} else {
+			// 持久化存储中没有数据库，但内存中有，这种情况不应该发生
+			// 为了安全，关闭旧连接并重建
+			session.db.Close()
+			session.db = nil
+		}
 	}
 
+	// 如果内存中没有连接或连接已关闭，需要重建
 	// 重建数据库连接（使用持久化存储中的最新数据）
 	db, err := s.createDatabaseFromSessionData(sessionData)
 	if err != nil {
 		return nil, fmt.Errorf("重建连接失败: %w", err)
 	}
 
-	// 创建会话对象
-	session = &ConnectionSession{
-		db:              db,
-		dbType:          sessionData.DbType,
-		currentDatabase: sessionData.CurrentDatabase,
-		currentTable:    sessionData.CurrentTable,
-		createdAt:       sessionData.CreatedAt,
-		sessionData:     sessionData,
-	}
+	// 创建或更新会话对象
+	if exists && session != nil {
+		// 更新现有会话
+		s.sessionsMutex.Lock()
+		session.db = db
+		session.currentDatabase = sessionData.CurrentDatabase
+		session.currentTable = sessionData.CurrentTable
+		session.sessionData = sessionData
+		s.sessionsMutex.Unlock()
+	} else {
+		// 创建新会话
+		session = &ConnectionSession{
+			db:              db,
+			dbType:          sessionData.DbType,
+			currentDatabase: sessionData.CurrentDatabase,
+			currentTable:    sessionData.CurrentTable,
+			createdAt:       sessionData.CreatedAt,
+			sessionData:     sessionData,
+		}
 
-	// 保存到内存缓存
-	s.sessionsMutex.Lock()
-	s.sessions[connectionID] = session
-	s.sessionsMutex.Unlock()
+		// 保存到内存缓存
+		s.sessionsMutex.Lock()
+		s.sessions[connectionID] = session
+		s.sessionsMutex.Unlock()
+	}
 
 	return session, nil
 }

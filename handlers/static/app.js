@@ -149,6 +149,7 @@ const refreshData = document.getElementById('refreshData');
 const pagination = document.getElementById('pagination');
 const paginationInfo = document.getElementById('paginationInfo');
 const schemaContent = document.getElementById('schemaContent');
+const copySchemaBtn = document.getElementById('copySchemaBtn');
 const sqlQuery = document.getElementById('sqlQuery');
 const executeQuery = document.getElementById('executeQuery');
 const clearQuery = document.getElementById('clearQuery');
@@ -1114,7 +1115,7 @@ function displayTableData(rows, total, isClickHouse = false) {
     // ClickHouse 不显示操作列
     if (!isClickHouse) {
         const actionTh = document.createElement('th');
-        actionTh.style.width = '150px';
+        actionTh.className = 'action-column-header';
         actionTh.textContent = '操作';
         headRow.appendChild(actionTh);
     }
@@ -1142,6 +1143,10 @@ function displayTableData(rows, total, isClickHouse = false) {
         // ClickHouse 不显示操作列
         if (!isClickHouse) {
             const actionTd = document.createElement('td');
+            actionTd.className = 'action-column-cell';
+            const actionWrapper = document.createElement('div');
+            actionWrapper.className = 'action-buttons-wrapper';
+            
             const editBtn = document.createElement('button');
             editBtn.className = 'btn btn-secondary action-btn edit-row-btn';
             editBtn.textContent = '编辑';
@@ -1152,8 +1157,9 @@ function displayTableData(rows, total, isClickHouse = false) {
             deleteBtn.textContent = '删除';
             deleteBtn.dataset.row = JSON.stringify(row);
             
-            actionTd.appendChild(editBtn);
-            actionTd.appendChild(deleteBtn);
+            actionWrapper.appendChild(editBtn);
+            actionWrapper.appendChild(deleteBtn);
+            actionTd.appendChild(actionWrapper);
             bodyRow.appendChild(actionTd);
         }
         
@@ -1221,18 +1227,50 @@ async function loadTableSchema() {
         if (!response.ok || !data.success) {
             showNotification(data.message || '加载表结构失败', 'error');
             hideLoading(schemaLoading);
+            copySchemaBtn.style.display = 'none';
             return;
         }
         
         if (data.success) {
             schemaContent.textContent = data.schema;
+            copySchemaBtn.style.display = 'block';
         }
     } catch (error) {
         showNotification('加载表结构失败: ' + error.message, 'error');
+        copySchemaBtn.style.display = 'none';
     } finally {
         hideLoading(schemaLoading);
     }
 }
+
+// 复制表结构
+copySchemaBtn.addEventListener('click', async () => {
+    const schemaText = schemaContent.textContent;
+    if (!schemaText || schemaText === '请选择一个表查看结构') {
+        showNotification('没有可复制的内容', 'error');
+        return;
+    }
+    
+    try {
+        await navigator.clipboard.writeText(schemaText);
+        showNotification('表结构已复制到剪贴板', 'success');
+    } catch (error) {
+        // 降级方案：使用传统方法
+        const textArea = document.createElement('textarea');
+        textArea.value = schemaText;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showNotification('表结构已复制到剪贴板', 'success');
+        } catch (err) {
+            showNotification('复制失败，请手动复制', 'error');
+        }
+        document.body.removeChild(textArea);
+    }
+});
 
 // 标签页切换
 tabs.forEach(tab => {
@@ -1251,6 +1289,9 @@ function switchTab(tabName) {
     
     if (tabName === 'schema' && currentTable) {
         loadTableSchema();
+    } else if (tabName === 'schema' && !currentTable) {
+        // 如果没有选择表，隐藏复制按钮
+        copySchemaBtn.style.display = 'none';
     }
 }
 

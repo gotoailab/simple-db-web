@@ -299,12 +299,14 @@ body {
     flex: 1;
     border: 1px solid var(--border-color);
     border-radius: 4px;
+    position: relative;
 }
 
 .data-table {
     width: 100%;
     border-collapse: collapse;
     background: var(--surface);
+    min-width: 100%;
 }
 
 .data-table th {
@@ -333,11 +335,47 @@ body {
     border-bottom: none;
 }
 
+/* 操作列样式 - 固定在右边 */
+.action-column-header {
+    position: sticky;
+    right: 0;
+    background: var(--surface-light);
+    width: 180px;
+    min-width: 180px;
+    z-index: 11;
+    box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-column-cell {
+    position: sticky;
+    right: 0;
+    background: var(--surface);
+    width: 180px;
+    min-width: 180px;
+    z-index: 1;
+    box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.data-table tr:hover .action-column-cell {
+    background: var(--surface-light);
+}
+
+/* 操作按钮容器 */
+.action-buttons-wrapper {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+    justify-content: flex-start;
+    white-space: nowrap;
+    width: 100%;
+}
+
 /* 操作按钮 */
 .action-btn {
     padding: 0.3rem 0.6rem;
-    margin-right: 0.3rem;
     font-size: 0.85rem;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 /* 分页 */
@@ -365,6 +403,13 @@ body {
 .pagination button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Schema工具栏 */
+.schema-toolbar {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: flex-end;
 }
 
 /* 代码块 */

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SimpleDB - 数据库管理工具</title>
+    <title>SimpleDBWeb - 数据库管理工具</title>
     <script>
         // 动态设置 base 标签，确保相对路径正确解析
         (function() {
@@ -23,7 +23,7 @@
         <aside class="sidebar">
             <!-- Logo -->
             <div class="sidebar-header">
-                <h1 class="logo">SimpleDB</h1>
+                <h1 class="logo">SimpleDBWeb</h1>
             </div>
             
             <!-- 连接面板 -->
@@ -160,6 +160,9 @@
 
                 <!-- 结构标签页 -->
                 <div class="tab-content" id="schemaTab">
+                    <div class="schema-toolbar">
+                        <button class="btn btn-secondary" id="copySchemaBtn" style="display: none;">复制结构</button>
+                    </div>
                     <div class="code-block" style="position: relative;">
                         <div class="loading-overlay" id="schemaLoading" style="display: none;">
                             <div class="loading-spinner"></div>
@@ -190,7 +193,7 @@
             <!-- Footer -->
             <footer class="footer">
                 <div class="footer-content">
-                    <p>&copy; 2024 SimpleDB. All rights reserved.</p>
+                    <p>&copy; 2025 SimpleDBWeb. All rights reserved.</p>
                     <p>Simple Database Management Tool</p>
                 </div>
             </footer>

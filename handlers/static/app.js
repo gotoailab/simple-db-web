@@ -1037,6 +1037,10 @@ async function loadTableData() {
         
         if (!response.ok || !data.success) {
             showNotification(data.message || '获取数据失败', 'error');
+            // 即使获取数据失败，如果有列信息，也要显示表头
+            if (currentColumns.length > 0) {
+                displayTableData([], 0, false);
+            }
             hideLoading(dataLoading);
             setButtonLoading(refreshData, false);
             return;
@@ -1077,49 +1081,59 @@ function displayTableData(rows, total, isClickHouse = false) {
         dataTableBody.removeChild(dataTableBody.firstChild);
     }
     
+    // 获取列名，严格按照 currentColumns 的顺序
+    let columns;
+    if (rows.length > 0) {
+        // 有数据时，使用数据中的列
+        if (currentColumns.length > 0) {
+            // 使用获取到的列顺序，只包含数据中实际存在的列
+            const rowKeys = new Set(Object.keys(rows[0]));
+            columns = currentColumns.filter(col => rowKeys.has(col));
+            // 添加数据中存在但列信息中不存在的列（以防万一，放在最后）
+            Object.keys(rows[0]).forEach(key => {
+                if (!columns.includes(key)) {
+                    columns.push(key);
+                }
+            });
+        } else {
+            // 如果没有列信息，使用对象键（降级方案）
+            columns = Object.keys(rows[0]);
+        }
+    } else {
+        // 没有数据时，使用 currentColumns（如果存在）
+        columns = currentColumns.length > 0 ? currentColumns : [];
+    }
+    
+    // 创建表头（即使没有数据也要显示表头）
+    if (columns.length > 0) {
+        const headRow = document.createElement('tr');
+        columns.forEach(col => {
+            const th = document.createElement('th');
+            th.textContent = col;
+            headRow.appendChild(th);
+        });
+        // ClickHouse 不显示操作列
+        if (!isClickHouse) {
+            const actionTh = document.createElement('th');
+            actionTh.className = 'action-column-header';
+            actionTh.textContent = '操作';
+            headRow.appendChild(actionTh);
+        }
+        dataTableHead.appendChild(headRow);
+    }
+    
+    // 如果没有数据，显示"没有数据"提示
     if (rows.length === 0) {
         const emptyRow = document.createElement('tr');
         const emptyCell = document.createElement('td');
-        emptyCell.colSpan = 100;
+        const colSpan = columns.length + (isClickHouse ? 0 : 1); // 包括操作列
+        emptyCell.colSpan = colSpan;
         emptyCell.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary);';
         emptyCell.textContent = '没有数据';
         emptyRow.appendChild(emptyCell);
         dataTableBody.appendChild(emptyRow);
         return;
     }
-    
-    // 获取列名，严格按照 currentColumns 的顺序
-    let columns;
-    if (currentColumns.length > 0) {
-        // 使用获取到的列顺序，只包含数据中实际存在的列
-        const rowKeys = new Set(Object.keys(rows[0]));
-        columns = currentColumns.filter(col => rowKeys.has(col));
-        // 添加数据中存在但列信息中不存在的列（以防万一，放在最后）
-        Object.keys(rows[0]).forEach(key => {
-            if (!columns.includes(key)) {
-                columns.push(key);
-            }
-        });
-    } else {
-        // 如果没有列信息，使用对象键（降级方案）
-        columns = Object.keys(rows[0]);
-    }
-    
-    // 创建表头
-    const headRow = document.createElement('tr');
-    columns.forEach(col => {
-        const th = document.createElement('th');
-        th.textContent = col;
-        headRow.appendChild(th);
-    });
-    // ClickHouse 不显示操作列
-    if (!isClickHouse) {
-        const actionTh = document.createElement('th');
-        actionTh.className = 'action-column-header';
-        actionTh.textContent = '操作';
-        headRow.appendChild(actionTh);
-    }
-    dataTableHead.appendChild(headRow);
     
     // 创建表体
     rows.forEach((row, index) => {

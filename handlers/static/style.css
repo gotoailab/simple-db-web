@@ -405,13 +405,6 @@ body {
     cursor: not-allowed;
 }
 
-/* Schema工具栏 */
-.schema-toolbar {
-    margin-bottom: 1rem;
-    display: flex;
-    justify-content: flex-end;
-}
-
 /* 代码块 */
 .code-block {
     background: var(--surface);
@@ -419,6 +412,7 @@ body {
     border-radius: 4px;
     padding: 1rem;
     overflow-x: auto;
+    position: relative;
 }
 
 .code-block pre {
@@ -427,6 +421,22 @@ body {
     font-family: 'Courier New', monospace;
     font-size: 0.9rem;
     line-height: 1.6;
+}
+
+/* 复制代码按钮 - 浮动在右上角 */
+.copy-code-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.copy-code-btn:hover {
+    opacity: 1;
 }
 
 /* SQL查询编辑器 */

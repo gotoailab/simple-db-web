@@ -244,6 +244,16 @@ func getConnectionID(r *http.Request) string {
 	return r.URL.Query().Get("connectionId")
 }
 
+// writeJSONError 写入JSON格式的错误响应
+func writeJSONError(w http.ResponseWriter, statusCode int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": false,
+		"message": message,
+	})
+}
+
 // createDatabaseFromSessionData 根据SessionData重建数据库连接
 func (s *Server) createDatabaseFromSessionData(data *SessionData) (database.Database, error) {
 	var db database.Database
@@ -301,22 +311,30 @@ func (s *Server) createDatabaseFromSessionData(data *SessionData) (database.Data
 // getSession 根据连接ID获取会话
 // 如果内存缓存中没有，会尝试从持久化存储重建
 func (s *Server) getSession(connectionID string) (*ConnectionSession, error) {
-	// 先检查内存缓存
-	s.sessionsMutex.RLock()
-	session, exists := s.sessions[connectionID]
-	s.sessionsMutex.RUnlock()
-
-	// 从持久化存储获取
+	// 从持久化存储获取（这是权威数据源）
 	sessionData, err := s.sessionStorage.Get(connectionID)
 	if err != nil {
 		return nil, fmt.Errorf("连接不存在或已断开")
 	}
 
-	if exists && sessionData.CurrentDatabase == session.currentDatabase {
+	// 检查内存缓存
+	s.sessionsMutex.RLock()
+	session, exists := s.sessions[connectionID]
+	s.sessionsMutex.RUnlock()
+
+	// 如果内存中存在且数据库一致，直接返回
+	if exists && session != nil && session.currentDatabase == sessionData.CurrentDatabase {
+		// 确保sessionData引用是最新的
+		session.sessionData = sessionData
 		return session, nil
 	}
 
-	// 重建数据库连接
+	// 如果内存中存在但数据库不一致，需要关闭旧连接
+	if exists && session != nil && session.db != nil {
+		session.db.Close()
+	}
+
+	// 重建数据库连接（使用持久化存储中的最新数据）
 	db, err := s.createDatabaseFromSessionData(sessionData)
 	if err != nil {
 		return nil, fmt.Errorf("重建连接失败: %w", err)
@@ -414,20 +432,20 @@ func (s *Server) Home(w http.ResponseWriter, r *http.Request) {
 // Connect 连接数据库
 func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "方法不允许")
 		return
 	}
 
 	var info database.ConnectionInfo
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
-		http.Error(w, fmt.Sprintf("解析请求失败: %v", err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
 		return
 	}
 
 	// 生成连接ID
 	connectionID, err := generateConnectionID()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("生成连接ID失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("生成连接ID失败: %v", err))
 		return
 	}
 
@@ -464,7 +482,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		case "postgres", "postgresql":
 			db = database.NewPostgreSQL()
 		default:
-			http.Error(w, fmt.Sprintf("不支持的数据库类型: %s", info.Type), http.StatusBadRequest)
+			writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("不支持的数据库类型: %s", info.Type))
 			return
 		}
 	}
@@ -477,7 +495,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		dsn = database.BuildDSN(info)
 	}
 	if err := db.Connect(dsn); err != nil {
-		http.Error(w, fmt.Sprintf("连接失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("连接失败: %v", err))
 		return
 	}
 
@@ -532,19 +550,19 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetTables(w http.ResponseWriter, r *http.Request) {
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	tables, err := session.db.GetTables()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取表列表失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取表列表失败: %v", err))
 		return
 	}
 
@@ -558,19 +576,19 @@ func (s *Server) GetTables(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	tableName := r.URL.Query().Get("table")
 	if tableName == "" {
-		http.Error(w, "缺少表名参数", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少表名参数")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -580,7 +598,7 @@ func (s *Server) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 
 	schema, err := session.db.GetTableSchema(tableName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取表结构失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取表结构失败: %v", err))
 		return
 	}
 
@@ -594,25 +612,25 @@ func (s *Server) GetTableSchema(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetTableColumns(w http.ResponseWriter, r *http.Request) {
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	tableName := r.URL.Query().Get("table")
 	if tableName == "" {
-		http.Error(w, "缺少表名参数", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少表名参数")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	columns, err := session.db.GetTableColumns(tableName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取列信息失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取列信息失败: %v", err))
 		return
 	}
 
@@ -626,13 +644,13 @@ func (s *Server) GetTableColumns(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	tableName := r.URL.Query().Get("table")
 	if tableName == "" {
-		http.Error(w, "缺少表名参数", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少表名参数")
 		return
 	}
 
@@ -648,7 +666,7 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -658,12 +676,12 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 
 	data, total, err := session.db.GetTableData(tableName, page, pageSize)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取数据失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取数据失败: %v", err))
 		return
 	}
 	columns, err := session.db.GetTableColumns(tableName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取列信息失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取列信息失败: %v", err))
 		return
 	}
 
@@ -686,13 +704,13 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 // ExecuteQuery 执行SQL查询
 func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "方法不允许")
 		return
 	}
 
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
@@ -700,18 +718,18 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 		Query string `json:"query"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("解析请求失败: %v", err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
 		return
 	}
 
 	if req.Query == "" {
-		http.Error(w, "SQL查询不能为空", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "SQL查询不能为空")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -720,7 +738,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	if queryUpper == "SELECT" || queryUpper == "select" {
 		results, err := session.db.ExecuteQuery(req.Query)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("执行查询失败: %v", err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("执行查询失败: %v", err))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -730,7 +748,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	} else if queryUpper == "UPDATE" || queryUpper == "update" {
 		affected, err := session.db.ExecuteUpdate(req.Query)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("执行更新失败: %v", err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("执行更新失败: %v", err))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -740,7 +758,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	} else if queryUpper == "DELETE" || queryUpper == "delete" {
 		affected, err := session.db.ExecuteDelete(req.Query)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("执行删除失败: %v", err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("执行删除失败: %v", err))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -750,7 +768,7 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	} else if queryUpper == "INSERT" || queryUpper == "insert" {
 		affected, err := session.db.ExecuteInsert(req.Query)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("执行插入失败: %v", err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("执行插入失败: %v", err))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -758,32 +776,32 @@ func (s *Server) ExecuteQuery(w http.ResponseWriter, r *http.Request) {
 			"affected": affected,
 		})
 	} else {
-		http.Error(w, "不支持的SQL类型", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "不支持的SQL类型")
 	}
 }
 
 // UpdateRow 更新行数据
 func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "方法不允许")
 		return
 	}
 
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// ClickHouse 不支持 UPDATE 操作
 	if session.dbType == "clickhouse" {
-		http.Error(w, "ClickHouse 不支持 UPDATE 操作", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "ClickHouse 不支持 UPDATE 操作")
 		return
 	}
 
@@ -794,12 +812,12 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("解析请求失败: %v", err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
 		return
 	}
 
 	if req.Table == "" {
-		http.Error(w, "表名不能为空", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "表名不能为空")
 		return
 	}
 
@@ -840,7 +858,7 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 
 	affected, err := session.db.ExecuteUpdate(query)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("更新失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("更新失败: %v", err))
 		return
 	}
 
@@ -853,25 +871,25 @@ func (s *Server) UpdateRow(w http.ResponseWriter, r *http.Request) {
 // DeleteRow 删除行数据
 func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "方法不允许")
 		return
 	}
 
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// ClickHouse 不支持 DELETE 操作
 	if session.dbType == "clickhouse" {
-		http.Error(w, "ClickHouse 不支持 DELETE 操作", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "ClickHouse 不支持 DELETE 操作")
 		return
 	}
 
@@ -881,12 +899,12 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("解析请求失败: %v", err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
 		return
 	}
 
 	if req.Table == "" {
-		http.Error(w, "表名不能为空", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "表名不能为空")
 		return
 	}
 
@@ -910,7 +928,7 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 
 	affected, err := session.db.ExecuteDelete(query)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("删除失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("删除失败: %v", err))
 		return
 	}
 
@@ -924,19 +942,19 @@ func (s *Server) DeleteRow(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetDatabases(w http.ResponseWriter, r *http.Request) {
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	databases, err := session.db.GetDatabases()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取数据库列表失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取数据库列表失败: %v", err))
 		return
 	}
 
@@ -949,13 +967,13 @@ func (s *Server) GetDatabases(w http.ResponseWriter, r *http.Request) {
 // SwitchDatabase 切换数据库
 func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "方法不允许")
 		return
 	}
 
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 
@@ -963,23 +981,23 @@ func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
 		Database string `json:"database"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("解析请求失败: %v", err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("解析请求失败: %v", err))
 		return
 	}
 
 	if req.Database == "" {
-		http.Error(w, "数据库名不能为空", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "数据库名不能为空")
 		return
 	}
 
 	session, err := s.getSession(connectionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := session.db.SwitchDatabase(req.Database); err != nil {
-		http.Error(w, fmt.Sprintf("切换数据库失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("切换数据库失败: %v", err))
 		return
 	}
 
@@ -991,7 +1009,7 @@ func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
 	// 切换数据库后重新加载表列表
 	tables, err := session.db.GetTables()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("获取表列表失败: %v", err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取表列表失败: %v", err))
 		return
 	}
 
@@ -1005,13 +1023,13 @@ func (s *Server) SwitchDatabase(w http.ResponseWriter, r *http.Request) {
 // Disconnect 断开连接
 func (s *Server) Disconnect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "方法不允许")
 		return
 	}
 
 	connectionID := getConnectionID(r)
 	if connectionID == "" {
-		http.Error(w, "缺少连接ID", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
 		return
 	}
 

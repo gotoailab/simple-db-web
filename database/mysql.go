@@ -11,6 +11,8 @@ import (
 // MySQL 实现Database接口
 type MySQL struct {
 	db *sql.DB
+
+	dsn string
 }
 
 // NewMySQL 创建MySQL实例
@@ -33,6 +35,7 @@ func (m *MySQL) Connect(dsn string) error {
 	if oldDB != nil {
 		oldDB.Close()
 	}
+	m.dsn = dsn
 	return nil
 }
 
@@ -258,11 +261,13 @@ func (m *MySQL) GetDatabases() ([]string, error) {
 
 // SwitchDatabase 切换当前使用的数据库
 func (m *MySQL) SwitchDatabase(databaseName string) error {
-	_, err := m.db.Exec(fmt.Sprintf("USE `%s`", databaseName))
+	dbConfig, err := GetDBConfigFromDSN(m.dsn)
 	if err != nil {
-		return fmt.Errorf("切换数据库失败: %w", err)
+		return err
 	}
-	return nil
+	dbConfig.Database = databaseName
+	m.dsn = dbConfig.BuildDSN()
+	return m.Connect(m.dsn)
 }
 
 // BuildDSN 根据连接信息构建DSN

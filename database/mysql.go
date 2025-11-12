@@ -12,7 +12,8 @@ import (
 type MySQL struct {
 	db *sql.DB
 
-	dsn string
+	dsn      string
+	dbConfig *DBConfig
 }
 
 // NewMySQL 创建MySQL实例
@@ -36,6 +37,11 @@ func (m *MySQL) Connect(dsn string) error {
 		oldDB.Close()
 	}
 	m.dsn = dsn
+	dbConfig, err := GetDBConfigFromDSN(dsn)
+	if err != nil {
+		return err
+	}
+	m.dbConfig = dbConfig
 	return nil
 }
 
@@ -68,7 +74,7 @@ func (m *MySQL) GetTables() ([]string, error) {
 
 // GetTableSchema 获取表结构
 func (m *MySQL) GetTableSchema(tableName string) (string, error) {
-	rows, err := m.db.Query(fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName))
+	rows, err := m.db.Query(fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", m.dbConfig.Database, tableName))
 	if err != nil {
 		return "", fmt.Errorf("查询表结构失败: %w", err)
 	}
@@ -88,7 +94,7 @@ func (m *MySQL) GetTableSchema(tableName string) (string, error) {
 
 // GetTableColumns 获取表的列信息
 func (m *MySQL) GetTableColumns(tableName string) ([]ColumnInfo, error) {
-	query := fmt.Sprintf("DESCRIBE `%s`", tableName)
+	query := fmt.Sprintf("DESCRIBE `%s`.`%s`", m.dbConfig.Database, tableName)
 	rows, err := m.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("查询列信息失败: %w", err)

@@ -127,6 +127,7 @@
                 <div class="tab-content active" id="dataTab">
                     <div class="toolbar">
                         <button class="btn btn-secondary" id="refreshData" data-i18n="common.refresh">刷新</button>
+                        <button class="btn btn-secondary" id="exportDataBtn" data-i18n="data.exportExcel" style="display: none;">导出Excel</button>
                         <div class="pagination-info" id="paginationInfo"></div>
                         <div class="pagination-size-selector">
                             <label for="pageSizeSelect" style="margin-right: 0.5rem; color: var(--text-secondary); font-size: 0.875rem;"
@@ -173,6 +174,7 @@
                         <div class="query-toolbar">
                             <button class="btn btn-primary" id="executeQuery" data-i18n="query.execute">执行查询</button>
                             <button class="btn btn-secondary" id="clearQuery" data-i18n="common.clear">清空</button>
+                            <button class="btn btn-secondary" id="exportQueryBtn" data-i18n="query.exportExcel" style="display: none;">导出Excel</button>
                         </div>
                     </div>
                     <div class="query-results" id="queryResults" style="position: relative;">

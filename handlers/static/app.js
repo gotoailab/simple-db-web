@@ -88,6 +88,8 @@ const i18n = {
             'query.success': 'Operation successful, {affected} rows affected',
             'query.failed': 'Execution failed',
             'query.unsupported': 'Unsupported SQL type',
+            'query.exportExcel': 'Export to Excel',
+            'query.exportSuccess': 'Export successful',
             
             // 编辑和删除
             'edit.title': 'Edit Row Data',
@@ -118,6 +120,8 @@ const i18n = {
             'error.copyFailed': 'Copy failed, please copy manually',
             'error.copySuccess': 'Schema copied to clipboard',
             'error.noContent': 'No content to copy',
+            'error.exportFailed': 'Export failed',
+            'error.noTable': 'No table selected',
             
             // 语言切换
             'lang.en': 'English',
@@ -201,6 +205,8 @@ const i18n = {
             'data.nextPage': '下一页',
             'data.copySchema': '复制',
             'data.copySchemaTitle': '复制结构',
+            'data.exportExcel': '导出Excel',
+            'data.exportSuccess': '导出成功',
             
             // SQL查询
             'query.placeholder': '输入SQL查询...',
@@ -210,6 +216,8 @@ const i18n = {
             'query.success': '操作成功，影响 {affected} 行',
             'query.failed': '执行失败',
             'query.unsupported': '不支持的SQL类型',
+            'query.exportExcel': '导出Excel',
+            'query.exportSuccess': '导出成功',
             
             // 编辑和删除
             'edit.title': '编辑行数据',
@@ -240,6 +248,8 @@ const i18n = {
             'error.copyFailed': '复制失败，请手动复制',
             'error.copySuccess': '表结构已复制到剪贴板',
             'error.noContent': '没有可复制的内容',
+            'error.exportFailed': '导出失败',
+            'error.noTable': '未选择表',
             
             // 语言切换
             'lang.en': 'English',
@@ -323,6 +333,8 @@ const i18n = {
             'data.nextPage': '下一頁',
             'data.copySchema': '複製',
             'data.copySchemaTitle': '複製結構',
+            'data.exportExcel': '匯出Excel',
+            'data.exportSuccess': '匯出成功',
             
             // SQL查询
             'query.placeholder': '輸入SQL查詢...',
@@ -332,6 +344,8 @@ const i18n = {
             'query.success': '操作成功，影響 {affected} 行',
             'query.failed': '執行失敗',
             'query.unsupported': '不支援的SQL類型',
+            'query.exportExcel': '匯出Excel',
+            'query.exportSuccess': '匯出成功',
             
             // 编辑和删除
             'edit.title': '編輯行資料',
@@ -362,6 +376,8 @@ const i18n = {
             'error.copyFailed': '複製失敗，請手動複製',
             'error.copySuccess': '表結構已複製到剪貼簿',
             'error.noContent': '沒有可複製的內容',
+            'error.exportFailed': '匯出失敗',
+            'error.noTable': '未選擇表',
             
             // 语言切换
             'lang.en': 'English',
@@ -586,6 +602,7 @@ const queryTab = document.getElementById('queryTab');
 const dataTableHead = document.getElementById('dataTableHead');
 const dataTableBody = document.getElementById('dataTableBody');
 const refreshData = document.getElementById('refreshData');
+const exportDataBtn = document.getElementById('exportDataBtn');
 const pagination = document.getElementById('pagination');
 const paginationInfo = document.getElementById('paginationInfo');
 const pageSizeSelect = document.getElementById('pageSizeSelect');
@@ -594,6 +611,7 @@ const copySchemaBtn = document.getElementById('copySchemaBtn');
 const sqlQuery = document.getElementById('sqlQuery');
 const executeQuery = document.getElementById('executeQuery');
 const clearQuery = document.getElementById('clearQuery');
+const exportQueryBtn = document.getElementById('exportQueryBtn');
 const queryResults = document.getElementById('queryResults');
 const editModal = document.getElementById('editModal');
 const editForm = document.getElementById('editForm');
@@ -947,7 +965,6 @@ async function connectWithSavedConnection(savedConn) {
             
             if (hasDatabaseInDSN) {
                 // DSN中包含数据库,直接使用该数据库
-                connectionPanel.style.display = 'none';
                 databasePanel.style.display = 'block';
                 await loadDatabases(data.databases || []);
                 // 尝试从DSN中提取数据库名
@@ -962,7 +979,6 @@ async function connectWithSavedConnection(savedConn) {
                 }
             } else {
                 // DSN中不包含数据库,显示数据库选择器
-                connectionPanel.style.display = 'none';
                 databasePanel.style.display = 'block';
                 await loadDatabases(data.databases || []);
             }
@@ -1838,6 +1854,11 @@ async function loadTableData() {
             const isClickHouse = data.isClickHouse || false;
             displayTableData(dataByColumns, data.total, isClickHouse);
             updatePagination(data.total, data.page, data.pageSize, isClickHouse);
+            
+            // 显示导出按钮
+            if (exportDataBtn) {
+                exportDataBtn.style.display = 'inline-block';
+            }
         }
     } catch (error) {
         showNotification(t('error.loadData') + ': ' + error.message, 'error');
@@ -2133,6 +2154,10 @@ executeQuery.addEventListener('click', async () => {
         
         if (!response.ok || !data.success) {
             queryResults.innerHTML = `<div class="query-message error">${data.message || t('query.failed')}</div>`;
+            // 隐藏导出按钮（查询失败）
+            if (exportQueryBtn) {
+                exportQueryBtn.style.display = 'none';
+            }
             return;
         }
         
@@ -2140,13 +2165,25 @@ executeQuery.addEventListener('click', async () => {
             if (data.data) {
                 // 查询结果
                 displayQueryResults(data.data);
+                // 显示导出按钮
+                if (exportQueryBtn) {
+                    exportQueryBtn.style.display = 'inline-block';
+                }
             } else if (data.affected !== undefined) {
                 // 更新/删除/插入结果
                 queryResults.innerHTML = `<div class="query-message success">${t('query.success', { affected: data.affected })}</div>`;
+                // 隐藏导出按钮（非SELECT查询）
+                if (exportQueryBtn) {
+                    exportQueryBtn.style.display = 'none';
+                }
             }
         }
     } catch (error) {
         queryResults.innerHTML = `<div class="query-message error">${t('query.failed')}: ${error.message}</div>`;
+        // 隐藏导出按钮（查询失败）
+        if (exportQueryBtn) {
+            exportQueryBtn.style.display = 'none';
+        }
     } finally {
         hideLoading(queryLoading);
         setButtonLoading(executeQuery, false);
@@ -2185,7 +2222,121 @@ function displayQueryResults(rows) {
 clearQuery.addEventListener('click', () => {
     sqlQuery.value = '';
     queryResults.innerHTML = '';
+    // 隐藏导出按钮
+    if (exportQueryBtn) {
+        exportQueryBtn.style.display = 'none';
+    }
 });
+
+// 导出表数据为Excel
+if (exportDataBtn) {
+    exportDataBtn.addEventListener('click', async () => {
+        if (!currentTable) {
+            showNotification(t('error.noTable'), 'error');
+            return;
+        }
+        
+        setButtonLoading(exportDataBtn, true);
+        try {
+            const url = `${API_BASE}/table/export?table=${encodeURIComponent(currentTable)}&page=${currentPage}&pageSize=${pageSize}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Connection-ID': connectionId || ''
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                showNotification(errorData.message || t('error.exportFailed'), 'error');
+                return;
+            }
+            
+            // 获取文件名
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `${currentTable}_page${currentPage}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename=(.+)/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            // 下载文件
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            showNotification(t('data.exportSuccess'), 'success');
+        } catch (error) {
+            showNotification(t('error.exportFailed') + ': ' + error.message, 'error');
+        } finally {
+            setButtonLoading(exportDataBtn, false);
+        }
+    });
+}
+
+// 导出查询结果为Excel
+if (exportQueryBtn) {
+    exportQueryBtn.addEventListener('click', async () => {
+        const query = sqlQuery.value.trim();
+        if (!query) {
+            showNotification(t('query.empty'), 'error');
+            return;
+        }
+        
+        setButtonLoading(exportQueryBtn, true);
+        try {
+            const response = await fetch(`${API_BASE}/query/export`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Connection-ID': connectionId || ''
+                },
+                body: JSON.stringify({ query })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                showNotification(errorData.message || t('error.exportFailed'), 'error');
+                return;
+            }
+            
+            // 获取文件名
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `query_result_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename=(.+)/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            // 下载文件
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            showNotification(t('query.exportSuccess'), 'success');
+        } catch (error) {
+            showNotification(t('error.exportFailed') + ': ' + error.message, 'error');
+        } finally {
+            setButtonLoading(exportQueryBtn, false);
+        }
+    });
+}
 
 // 编辑行（全局函数，供外部调用）
 window.editRow = function(rowData) {

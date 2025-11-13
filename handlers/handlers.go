@@ -1285,7 +1285,9 @@ func (s *Server) RegisterRoutes(router Router) {
 	router.HandleFunc("/api/table/schema", s.GetTableSchema)
 	router.HandleFunc("/api/table/columns", s.GetTableColumns)
 	router.HandleFunc("/api/table/data", s.GetTableData)
+	router.HandleFunc("/api/table/export", s.ExportTableDataToExcel)
 	router.POST("/api/query", s.ExecuteQuery)
+	router.POST("/api/query/export", s.ExportQueryResultsToExcel)
 	router.POST("/api/row/update", s.UpdateRow)
 	router.POST("/api/row/delete", s.DeleteRow)
 

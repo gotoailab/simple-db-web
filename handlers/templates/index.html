@@ -181,12 +181,8 @@
                 <!-- SQL查询标签页 -->
                 <div class="tab-content" id="queryTab">
                     <div class="query-editor">
-                        <div style="position: relative;">
+                        <div id="sqlEditorContainer" style="position: relative;">
                             <textarea id="sqlQuery" class="sql-input" data-i18n-placeholder="query.placeholder" placeholder="输入SQL查询..."></textarea>
-                            <div class="query-history-dropdown" id="queryHistoryDropdown" style="display: none;">
-                                <div class="query-history-header" data-i18n="query.history">查询历史</div>
-                                <div class="query-history-list" id="queryHistoryList"></div>
-                            </div>
                         </div>
                         <div class="query-toolbar">
                             <button class="btn btn-primary" id="executeQuery" data-i18n="query.execute">执行查询</button>
@@ -276,6 +272,23 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancelDelete" data-i18n="common.cancel">取消</button>
                 <button class="btn btn-danger" id="confirmDelete" data-i18n="common.delete">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查询历史模态框 -->
+    <div class="modal" id="queryHistoryModal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px; max-height: 80vh;">
+            <div class="modal-header">
+                <h3 data-i18n="query.history">查询历史</h3>
+                <button class="modal-close" id="closeQueryHistoryModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="query-history-list" id="queryHistoryList" style="max-height: 60vh; overflow-y: auto;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="clearQueryHistory" data-i18n="query.clearHistory">清空历史</button>
+                <button class="btn btn-secondary" id="closeQueryHistoryBtn" data-i18n="common.close">关闭</button>
             </div>
         </div>
     </div>

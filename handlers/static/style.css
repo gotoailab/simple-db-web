@@ -760,6 +760,7 @@ body {
     font-size: 0.9rem;
     height: auto;
     min-height: 150px;
+    font-family: 'Courier New', monospace;
 }
 
 .CodeMirror-focused {
@@ -767,33 +768,59 @@ body {
     box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
 }
 
-/* 查询历史下拉菜单 */
-.query-history-dropdown {
+/* 修复CodeMirror行号和内容的布局 */
+.CodeMirror-linenumber {
+    padding: 0 8px;
+    min-width: 2.5em;
+    text-align: right;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.CodeMirror-lines {
+    padding: 8px;
+}
+
+.CodeMirror-scroll {
+    overflow: auto !important;
+}
+
+/* CodeMirror自动补全提示样式 */
+.CodeMirror-hints {
     position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
+    z-index: 10;
+    overflow: hidden;
+    list-style: none;
+    margin: 0;
+    padding: 2px;
+    box-shadow: 2px 3px 5px rgba(0,0,0,.2);
+    border-radius: 3px;
     background: var(--surface);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
-    box-shadow: var(--shadow);
-    z-index: 1000;
-    max-height: 300px;
+    font-size: 90%;
+    font-family: monospace;
+    max-height: 20em;
     overflow-y: auto;
-    margin-top: 0.25rem;
 }
 
-.query-history-header {
-    padding: 0.75rem;
-    font-weight: 600;
-    font-size: 0.875rem;
+.CodeMirror-hint {
+    margin: 0;
+    padding: 0 4px;
+    border-radius: 2px;
+    white-space: pre;
     color: var(--text-primary);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--surface-light);
+    cursor: pointer;
+    line-height: 1.5;
 }
 
+.CodeMirror-hint-active {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* 查询历史列表样式（在模态框中） */
 .query-history-list {
-    max-height: 250px;
+    max-height: 60vh;
     overflow-y: auto;
 }
 

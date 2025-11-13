@@ -757,12 +757,18 @@ body {
 .CodeMirror {
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-size: 0.9rem;
+    font-size: 14px;
     height: auto;
     min-height: 150px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
     direction: ltr;
     text-align: left;
+    line-height: 1.6;
+        letter-spacing: 0.3px;
+    }
+    
+    .CodeMirror-sizer {
+        font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
 }
 
 .CodeMirror-focused {
@@ -789,6 +795,9 @@ body {
     color: var(--text-secondary);
     white-space: nowrap;
     cursor: default;
+    font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
 }
 
 .CodeMirror-lines {
@@ -804,6 +813,10 @@ body {
     word-break: normal;
     padding: 0;
     margin: 0;
+    font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        letter-spacing: 0.3px;
 }
 
 .CodeMirror-scroll {
@@ -844,7 +857,12 @@ body {
 
 .CodeMirror pre.CodeMirror-line,
 .CodeMirror pre.CodeMirror-line-like {
-    padding-left: 8px;
+    padding: 0 8px;
+        margin: 0;
+        font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        letter-spacing: 0.3px;
 }
 
 /* CodeMirror自动补全提示样式 */
@@ -859,10 +877,11 @@ body {
     border-radius: 3px;
     background: var(--surface);
     border: 1px solid var(--border-color);
-    font-size: 90%;
-    font-family: monospace;
+    font-size: 13px;
+        font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
     max-height: 20em;
     overflow-y: auto;
+    line-height: 1.5;
 }
 
 .CodeMirror-hint {

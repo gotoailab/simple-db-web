@@ -82,6 +82,8 @@ const i18n = {
             'data.nextPage': 'Next',
             'data.copySchema': 'Copy',
             'data.copySchemaTitle': 'Copy Schema',
+            'data.exportExcel': 'Export to Excel',
+            'data.exportSuccess': 'Export successful',
             
             // SQL查询
             'query.placeholder': 'Enter SQL query...',
@@ -131,6 +133,7 @@ const i18n = {
             'error.noContent': 'No content to copy',
             'error.exportFailed': 'Export failed',
             'error.noTable': 'No table selected',
+            'error.timeout': 'Request timeout, please try again later',
             
             // 语言切换
             'lang.en': 'English',
@@ -275,6 +278,7 @@ const i18n = {
             'error.noContent': '没有可复制的内容',
             'error.exportFailed': '导出失败',
             'error.noTable': '未选择表',
+            'error.timeout': '请求超时，请稍后重试',
             
             // 语言切换
             'lang.en': 'English',
@@ -419,6 +423,7 @@ const i18n = {
             'error.noContent': '沒有可複製的內容',
             'error.exportFailed': '匯出失敗',
             'error.noTable': '未選擇表',
+            'error.timeout': '請求超時，請稍後重試',
             
             // 语言切换
             'lang.en': 'English',
@@ -497,8 +502,11 @@ window.SimpleDBConfig = window.SimpleDBConfig || {
     errorInterceptor: null
 };
 
-// 统一的API请求函数，支持拦截器
+// 统一的API请求函数，支持拦截器和超时处理
 async function apiRequest(url, options = {}) {
+    // 默认超时时间（30秒）
+    const timeout = options.timeout || 30000;
+    
     // 默认headers
     const defaultHeaders = {};
     
@@ -520,9 +528,10 @@ async function apiRequest(url, options = {}) {
         headers['X-Connection-ID'] = connectionId;
     }
     
-    // 构建请求配置
+    // 构建请求配置（排除timeout，因为fetch不支持timeout选项）
+    const { timeout: _, ...fetchOptions } = options;
     let requestOptions = {
-        ...options,
+        ...fetchOptions,
         headers: headers
     };
     
@@ -540,8 +549,20 @@ async function apiRequest(url, options = {}) {
     }
     
     try {
+        // 创建AbortController用于超时控制
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            controller.abort();
+        }, timeout);
+        
+        // 添加signal到请求选项
+        requestOptions.signal = controller.signal;
+        
         // 发送请求
         let response = await fetch(url, requestOptions);
+        
+        // 清除超时定时器
+        clearTimeout(timeoutId);
         
         // 调用响应拦截器（如果存在）
         if (window.SimpleDBConfig.responseInterceptor) {
@@ -554,6 +575,23 @@ async function apiRequest(url, options = {}) {
         
         return response;
     } catch (error) {
+        // 检查是否是超时错误
+        if (error.name === 'AbortError') {
+            const timeoutError = new Error('请求超时，请稍后重试');
+            timeoutError.name = 'TimeoutError';
+            timeoutError.isTimeout = true;
+            
+            // 调用错误拦截器（如果存在）
+            if (window.SimpleDBConfig.errorInterceptor) {
+                try {
+                    return await window.SimpleDBConfig.errorInterceptor(timeoutError, url, requestOptions);
+                } catch (interceptorError) {
+                    console.warn('错误拦截器执行失败:', interceptorError);
+                }
+            }
+            throw timeoutError;
+        }
+        
         // 调用错误拦截器（如果存在）
         if (window.SimpleDBConfig.errorInterceptor) {
             try {
@@ -737,11 +775,18 @@ if (languageSelect) {
     });
 }
 
-// 监听语言变化事件
+    // 监听语言变化事件
 window.addEventListener('languageChanged', () => {
     updateI18nElements();
     if (languageSelect) {
         languageSelect.value = i18n.currentLang;
+    }
+    // 更新导出按钮的翻译
+    if (exportDataBtn && exportDataBtn.style.display !== 'none') {
+        exportDataBtn.textContent = t('data.exportExcel');
+    }
+    if (exportQueryBtn && exportQueryBtn.style.display !== 'none') {
+        exportQueryBtn.textContent = t('query.exportExcel');
     }
 });
 
@@ -1329,7 +1374,7 @@ function initCodeMirror() {
     const container = document.getElementById('sqlEditorContainer');
     if (container) {
         // 确保CodeMirror在容器内正确显示
-        sqlEditor.setSize('100%', '150px');
+        sqlEditor.setSize('100%', '300px');
     }
     
     // 更新自动补全表信息的函数
@@ -1990,7 +2035,10 @@ async function loadDatabases(databases) {
                 });
             }
         } catch (error) {
-            showNotification(t('error.loadDatabases') + ': ' + error.message, 'error');
+            const errorMessage = error.isTimeout 
+                ? t('error.timeout') || '请求超时，请稍后重试'
+                : t('error.loadDatabases') + ': ' + error.message;
+            showNotification(errorMessage, 'error');
         } finally {
             hideLoading(databaseLoading);
         }
@@ -2105,7 +2153,8 @@ async function loadTables() {
         const data = await response.json();
         
         if (!response.ok || !data.success) {
-            showNotification(data.message || t('error.loadTables'), 'error');
+            const errorMessage = data.message || t('error.loadTables');
+            showNotification(errorMessage, 'error');
             hideLoading(tablesLoading);
             setButtonLoading(refreshTables, false);
             return;
@@ -2115,7 +2164,10 @@ async function loadTables() {
             displayTables(data.tables || []);
         }
     } catch (error) {
-        showNotification(t('error.loadTables') + ': ' + error.message, 'error');
+        const errorMessage = error.isTimeout 
+            ? t('error.timeout') || '请求超时，请稍后重试'
+            : t('error.loadTables') + ': ' + error.message;
+        showNotification(errorMessage, 'error');
     } finally {
         hideLoading(tablesLoading);
         setButtonLoading(refreshTables, false);
@@ -2177,7 +2229,8 @@ async function loadTableData() {
         const data = await response.json();
         
         if (!response.ok || !data.success) {
-            showNotification(data.message || t('error.loadData'), 'error');
+            const errorMessage = data.message || t('error.loadData');
+            showNotification(errorMessage, 'error');
             // 即使获取数据失败，如果有列信息，也要显示表头
             if (currentColumns.length > 0) {
                 displayTableData([], 0, false);
@@ -2204,13 +2257,18 @@ async function loadTableData() {
             displayTableData(dataByColumns, data.total, isClickHouse);
             updatePagination(data.total, data.page, data.pageSize, isClickHouse);
             
-            // 显示导出按钮
+            // 显示导出按钮并更新翻译
             if (exportDataBtn) {
                 exportDataBtn.style.display = 'inline-block';
+                exportDataBtn.setAttribute('data-i18n', 'data.exportExcel');
+                exportDataBtn.textContent = t('data.exportExcel');
             }
         }
     } catch (error) {
-        showNotification(t('error.loadData') + ': ' + error.message, 'error');
+        const errorMessage = error.isTimeout 
+            ? t('error.timeout') || '请求超时，请稍后重试'
+            : t('error.loadData') + ': ' + error.message;
+        showNotification(errorMessage, 'error');
     } finally {
         hideLoading(dataLoading);
         setButtonLoading(refreshData, false);
@@ -2408,7 +2466,8 @@ async function loadTableSchema() {
         const data = await response.json();
         
         if (!response.ok || !data.success) {
-            showNotification(data.message || t('error.loadSchema'), 'error');
+            const errorMessage = data.message || t('error.loadSchema');
+            showNotification(errorMessage, 'error');
             hideLoading(schemaLoading);
             copySchemaBtn.style.display = 'none';
             return;
@@ -2423,7 +2482,10 @@ async function loadTableSchema() {
             copySchemaBtn.title = t('data.copySchemaTitle');
         }
     } catch (error) {
-        showNotification(t('error.loadSchema') + ': ' + error.message, 'error');
+        const errorMessage = error.isTimeout 
+            ? t('error.timeout') || '请求超时，请稍后重试'
+            : t('error.loadSchema') + ': ' + error.message;
+        showNotification(errorMessage, 'error');
         copySchemaBtn.style.display = 'none';
     } finally {
         hideLoading(schemaLoading);
@@ -2524,9 +2586,11 @@ executeQuery.addEventListener('click', async () => {
                 // 显示当前结果
                 displayQueryResult(resultId);
                 
-                // 显示导出按钮
+                // 显示导出按钮并更新翻译
                 if (exportQueryBtn) {
                     exportQueryBtn.style.display = 'inline-block';
+                    exportQueryBtn.setAttribute('data-i18n', 'query.exportExcel');
+                    exportQueryBtn.textContent = t('query.exportExcel');
                 }
             } else if (data.affected !== undefined) {
                 // 更新/删除/插入结果（不保存到历史）

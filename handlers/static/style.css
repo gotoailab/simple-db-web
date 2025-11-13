@@ -217,6 +217,9 @@ body {
     border-radius: 4px;
     margin-bottom: 0.3rem;
     transition: background 0.2s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .table-item:hover {
@@ -454,7 +457,7 @@ body {
 
 .sql-input {
     width: 100%;
-    min-height: 150px;
+    min-height: 300px;
     padding: 1rem;
     background: var(--surface);
     border: 1px solid var(--border-color);
@@ -474,7 +477,7 @@ body {
 .query-toolbar {
     display: flex;
     gap: 0.5rem;
-    margin-top: 0.5rem;
+    margin-top: 0.8rem;
 }
 
 .query-results {
@@ -759,7 +762,7 @@ body {
     border-radius: 4px;
     font-size: 14px;
     height: auto;
-    min-height: 150px;
+    min-height: 300px;
     font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Courier New', monospace;
     direction: ltr;
     text-align: left;

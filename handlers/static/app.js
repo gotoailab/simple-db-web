@@ -228,6 +228,12 @@ const i18n = {
             'query.showHistory': '历史',
             'query.noHistory': '暂无查询历史',
             'query.historyItem': '历史 #{index}',
+            'query.clearHistory': '清空历史',
+            'query.historyCleared': '历史记录已清空',
+            'query.format': '格式化',
+            'query.formatSuccess': 'SQL格式化成功',
+            'query.formatFailed': '格式化失败',
+            'query.formatterNotLoaded': 'SQL格式化库未加载',
             
             // 编辑和删除
             'edit.title': '编辑行数据',
@@ -362,6 +368,10 @@ const i18n = {
             'query.historyItem': '歷史 #{index}',
             'query.clearHistory': '清空歷史',
             'query.historyCleared': '歷史記錄已清空',
+            'query.format': '格式化',
+            'query.formatSuccess': 'SQL格式化成功',
+            'query.formatFailed': '格式化失敗',
+            'query.formatterNotLoaded': 'SQL格式化庫未載入',
             
             // 编辑和删除
             'edit.title': '編輯行資料',
@@ -629,6 +639,7 @@ const executeQuery = document.getElementById('executeQuery');
 const clearQuery = document.getElementById('clearQuery');
 const exportQueryBtn = document.getElementById('exportQueryBtn');
 const showHistoryBtn = document.getElementById('showHistoryBtn');
+const formatQueryBtn = document.getElementById('formatQueryBtn');
 const queryHistoryModal = document.getElementById('queryHistoryModal');
 const queryHistoryList = document.getElementById('queryHistoryList');
 const closeQueryHistoryModal = document.getElementById('closeQueryHistoryModal');
@@ -2424,6 +2435,69 @@ function displayQueryResults(rows) {
     
     html += '</tbody></table>';
     queryResults.innerHTML = html;
+}
+
+// 格式化SQL查询
+if (formatQueryBtn) {
+    formatQueryBtn.addEventListener('click', () => {
+        try {
+            const query = sqlEditor ? sqlEditor.getValue() : sqlQuery.value;
+            if (!query || !query.trim()) {
+                showNotification(t('query.empty'), 'error');
+                return;
+            }
+            
+            // 尝试使用sql-formatter库
+            let formatted;
+            if (typeof sqlFormatter !== 'undefined' && sqlFormatter.format) {
+                formatted = sqlFormatter.format(query, {
+                    language: 'sql',
+                    indent: '  ',
+                    uppercase: false,
+                    linesBetweenQueries: 2
+                });
+            } else if (typeof window.sqlFormatter !== 'undefined' && window.sqlFormatter.format) {
+                formatted = window.sqlFormatter.format(query, {
+                    language: 'sql',
+                    indent: '  ',
+                    uppercase: false,
+                    linesBetweenQueries: 2
+                });
+            } else {
+                // 如果库未加载，使用简单的格式化
+                formatted = query
+                    .replace(/\s+/g, ' ')
+                    .replace(/\s*,\s*/g, ', ')
+                    .replace(/\s*\(\s*/g, ' (')
+                    .replace(/\s*\)\s*/g, ') ')
+                    .replace(/\s*=\s*/g, ' = ')
+                    .replace(/\s*SELECT\s+/gi, '\nSELECT ')
+                    .replace(/\s*FROM\s+/gi, '\nFROM ')
+                    .replace(/\s*WHERE\s+/gi, '\nWHERE ')
+                    .replace(/\s*JOIN\s+/gi, '\nJOIN ')
+                    .replace(/\s*LEFT\s+JOIN\s+/gi, '\nLEFT JOIN ')
+                    .replace(/\s*RIGHT\s+JOIN\s+/gi, '\nRIGHT JOIN ')
+                    .replace(/\s*INNER\s+JOIN\s+/gi, '\nINNER JOIN ')
+                    .replace(/\s*GROUP\s+BY\s+/gi, '\nGROUP BY ')
+                    .replace(/\s*ORDER\s+BY\s+/gi, '\nORDER BY ')
+                    .replace(/\s*HAVING\s+/gi, '\nHAVING ')
+                    .replace(/\s*LIMIT\s+/gi, '\nLIMIT ')
+                    .trim();
+            }
+            
+            if (sqlEditor) {
+                sqlEditor.setValue(formatted);
+                sqlEditor.focus();
+            } else {
+                sqlQuery.value = formatted;
+            }
+            
+            showNotification(t('query.formatSuccess'), 'success');
+        } catch (error) {
+            console.error('格式化SQL失败:', error);
+            showNotification(t('query.formatFailed') + ': ' + error.message, 'error');
+        }
+    });
 }
 
 // 清空查询

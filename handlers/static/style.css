@@ -761,6 +761,8 @@ body {
     height: auto;
     min-height: 150px;
     font-family: 'Courier New', monospace;
+    direction: ltr;
+    text-align: left;
 }
 
 .CodeMirror-focused {
@@ -769,20 +771,80 @@ body {
 }
 
 /* 修复CodeMirror行号和内容的布局 */
+.CodeMirror-gutters {
+    border-right: 1px solid var(--border-color);
+    background-color: var(--surface-light);
+    white-space: nowrap;
+    position: absolute;
+    left: 0;
+    top: 0;
+    min-height: 100%;
+    z-index: 3;
+}
+
 .CodeMirror-linenumber {
     padding: 0 8px;
     min-width: 2.5em;
     text-align: right;
     color: var(--text-secondary);
     white-space: nowrap;
+    cursor: default;
 }
 
 .CodeMirror-lines {
     padding: 8px;
+    position: relative;
+    min-height: 1px;
+}
+
+.CodeMirror pre {
+    position: relative;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    word-break: normal;
+    padding: 0;
+    margin: 0;
 }
 
 .CodeMirror-scroll {
     overflow: auto !important;
+    position: relative;
+    outline: none;
+}
+
+.CodeMirror-sizer {
+    position: relative;
+    border-right-width: 30px;
+    min-height: 0 !important;
+}
+
+.CodeMirror-gutter-wrapper {
+    position: absolute;
+    z-index: 4;
+    left: 0;
+}
+
+.CodeMirror-gutter {
+    white-space: normal;
+    height: 100%;
+    display: inline-block;
+    vertical-align: top;
+    margin-bottom: -30px;
+}
+
+.CodeMirror-gutter-elt {
+    position: absolute;
+    cursor: default;
+    z-index: 4;
+}
+
+.CodeMirror-lines {
+    padding-left: 0;
+}
+
+.CodeMirror pre.CodeMirror-line,
+.CodeMirror pre.CodeMirror-line-like {
+    padding-left: 8px;
 }
 
 /* CodeMirror自动补全提示样式 */

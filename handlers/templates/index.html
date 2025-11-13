@@ -27,6 +27,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/sql-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <!-- SQL格式化库 -->
+    <script src="https://cdn.jsdelivr.net/npm/sql-formatter@15.1.2/dist/sql-formatter.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -186,6 +188,7 @@
                         </div>
                         <div class="query-toolbar">
                             <button class="btn btn-primary" id="executeQuery" data-i18n="query.execute">执行查询</button>
+                            <button class="btn btn-secondary" id="formatQueryBtn" data-i18n="query.format">格式化</button>
                             <button class="btn btn-secondary" id="clearQuery" data-i18n="common.clear">清空</button>
                             <button class="btn btn-secondary" id="showHistoryBtn" data-i18n="query.showHistory" title="显示查询历史">历史</button>
                             <button class="btn btn-secondary" id="exportQueryBtn" data-i18n="query.exportExcel" style="display: none;">导出Excel</button>

@@ -38,6 +38,23 @@ type Database interface {
 	// pageSize: 每页大小
 	GetTableData(tableName string, page, pageSize int) ([]map[string]interface{}, int64, error)
 
+	// GetTableDataByID 基于主键ID获取表数据（高性能分页）
+	// tableName: 表名
+	// primaryKey: 主键列名
+	// lastId: 上一页的最后一个ID值（nil表示第一页，用于next方向）或当前页的第一个ID（用于prev方向）
+	// pageSize: 每页大小
+	// direction: 分页方向，"next"表示下一页（id > lastId），"prev"表示上一页（id < lastId）
+	// 返回: 数据列表, 总数, 下一页/上一页的最后一个ID, 错误
+	GetTableDataByID(tableName string, primaryKey string, lastId interface{}, pageSize int, direction string) ([]map[string]interface{}, int64, interface{}, error)
+	
+	// GetPageIdByPageNumber 根据页码计算该页的起始ID（用于页码跳转）
+	// tableName: 表名
+	// primaryKey: 主键列名
+	// page: 目标页码（从1开始）
+	// pageSize: 每页大小
+	// 返回: 该页的起始ID（即上一页的最后一个ID），错误
+	GetPageIdByPageNumber(tableName string, primaryKey string, page, pageSize int) (interface{}, error)
+
 	// GetTableColumns 获取表的列信息
 	GetTableColumns(tableName string) ([]ColumnInfo, error)
 

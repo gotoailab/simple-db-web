@@ -111,6 +111,14 @@ func (p *ProxyDatabaseWrapper) GetTableData(tableName string, page, pageSize int
 	return p.db.GetTableData(tableName, page, pageSize)
 }
 
+func (p *ProxyDatabaseWrapper) GetTableDataByID(tableName string, primaryKey string, lastId interface{}, pageSize int, direction string) ([]map[string]interface{}, int64, interface{}, error) {
+	return p.db.GetTableDataByID(tableName, primaryKey, lastId, pageSize, direction)
+}
+
+func (p *ProxyDatabaseWrapper) GetPageIdByPageNumber(tableName string, primaryKey string, page, pageSize int) (interface{}, error) {
+	return p.db.GetPageIdByPageNumber(tableName, primaryKey, page, pageSize)
+}
+
 func (p *ProxyDatabaseWrapper) GetTableColumns(tableName string) ([]database.ColumnInfo, error) {
 	return p.db.GetTableColumns(tableName)
 }

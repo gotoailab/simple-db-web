@@ -233,6 +233,124 @@ func (s *SQLite3) GetTableData(tableName string, page, pageSize int) ([]map[stri
 	return results, total, rows.Err()
 }
 
+// GetTableDataByID 基于主键ID获取表数据（高性能分页）
+func (s *SQLite3) GetTableDataByID(tableName string, primaryKey string, lastId interface{}, pageSize int, direction string) ([]map[string]interface{}, int64, interface{}, error) {
+	// 获取总数
+	var total int64
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", tableName)
+	if err := s.db.QueryRow(countQuery).Scan(&total); err != nil {
+		return nil, 0, nil, fmt.Errorf("查询总数失败: %w", err)
+	}
+
+	// 构建基于ID的查询
+	var query string
+	var rows *sql.Rows
+	var err error
+	
+	if direction == "prev" {
+		// 上一页：使用 WHERE id < lastId ORDER BY id DESC，然后反转结果
+		if lastId == nil {
+			return nil, 0, nil, fmt.Errorf("上一页需要提供lastId")
+		}
+		query = fmt.Sprintf("SELECT * FROM `%s` WHERE `%s` < ? ORDER BY `%s` DESC LIMIT %d", tableName, primaryKey, primaryKey, pageSize)
+		rows, err = s.db.Query(query, lastId)
+	} else {
+		// 下一页或第一页
+		if lastId == nil {
+			// 第一页：直接按ID排序取前pageSize条
+			query = fmt.Sprintf("SELECT * FROM `%s` ORDER BY `%s` ASC LIMIT %d", tableName, primaryKey, pageSize)
+			rows, err = s.db.Query(query)
+		} else {
+			// 后续页：使用 WHERE id > lastId
+			query = fmt.Sprintf("SELECT * FROM `%s` WHERE `%s` > ? ORDER BY `%s` ASC LIMIT %d", tableName, primaryKey, primaryKey, pageSize)
+			rows, err = s.db.Query(query, lastId)
+		}
+	}
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("查询数据失败: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	var results = make([]map[string]interface{}, 0)
+	var nextId interface{} = nil
+	var firstId interface{} = nil
+	
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, 0, nil, err
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else if val == nil {
+				row[col] = nil
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+		
+		// 记录第一个和最后一个ID
+		if idVal, ok := row[primaryKey]; ok {
+			if firstId == nil {
+				firstId = idVal
+			}
+			nextId = idVal
+		}
+	}
+	
+	// 如果是上一页，需要反转结果（因为查询时用了DESC）
+	if direction == "prev" {
+		// 反转结果数组
+		for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
+			results[i], results[j] = results[j], results[i]
+		}
+		// 上一页的nextId应该是当前页的第一个ID（用于继续向前翻页）
+		nextId = firstId
+	}
+
+	return results, total, nextId, rows.Err()
+}
+
+// GetPageIdByPageNumber 根据页码计算该页的起始ID（用于页码跳转）
+func (s *SQLite3) GetPageIdByPageNumber(tableName string, primaryKey string, page, pageSize int) (interface{}, error) {
+	if page <= 1 {
+		return nil, nil // 第一页没有lastId
+	}
+	
+	// 计算需要跳过的记录数
+	offset := (page - 1) * pageSize - 1 // 减1是因为我们要获取上一页的最后一个ID
+	
+	// 查询第offset条记录的ID
+	query := fmt.Sprintf("SELECT `%s` FROM `%s` ORDER BY `%s` ASC LIMIT 1 OFFSET %d", primaryKey, tableName, primaryKey, offset)
+	
+	var id interface{}
+	err := s.db.QueryRow(query).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// 如果查询不到，说明页码超出范围，返回nil
+			return nil, nil
+		}
+		return nil, fmt.Errorf("查询页码ID失败: %w", err)
+	}
+	
+	return id, nil
+}
+
 // GetDatabases SQLite3不支持多数据库，返回空列表
 func (s *SQLite3) GetDatabases() ([]string, error) {
 	return []string{}, nil

@@ -407,13 +407,22 @@ body {
     cursor: pointer;
 }
 
-.pagination button:hover:not(:disabled) {
+.pagination button:hover:not(:disabled):not(.active) {
     background: var(--surface);
 }
 
 .pagination button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.pagination button.active {
+    background: #9f8105;
+    cursor: default;
+}
+
+.pagination button.active:hover {
+    background: #9f8105;
 }
 
 /* 代码块 */

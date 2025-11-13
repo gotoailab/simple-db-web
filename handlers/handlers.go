@@ -896,6 +896,25 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 		pageSize = 50
 	}
 
+	// 获取lastId参数（用于基于ID的分页）
+	lastIdStr := r.URL.Query().Get("lastId")
+	var lastId interface{} = nil
+	if lastIdStr != "" {
+		// 尝试解析为整数
+		if idInt, err := strconv.ParseInt(lastIdStr, 10, 64); err == nil {
+			lastId = idInt
+		} else {
+			// 如果不是整数，保持为字符串（用于UUID等）
+			lastId = lastIdStr
+		}
+	}
+
+	// 获取direction参数（用于基于ID的分页方向）
+	direction := r.URL.Query().Get("direction")
+	if direction == "" {
+		direction = "next" // 默认为下一页
+	}
+
 	session, err := s.getSession(connectionID)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -906,21 +925,85 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 		s.currentTable = tableName
 	})
 
-	data, total, err := session.db.GetTableData(tableName, page, pageSize)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取数据失败: %v", err))
-		return
-	}
+	// 先获取列信息，检查是否有单个整数主键
 	columns, err := session.db.GetTableColumns(tableName)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取列信息失败: %v", err))
 		return
 	}
 
+	// 检查是否有单个整数主键ID
+	var primaryKeyColumn *database.ColumnInfo = nil
+	primaryKeyCount := 0
+	for i := range columns {
+		if columns[i].Key == "PRI" {
+			primaryKeyCount++
+			primaryKeyColumn = &columns[i]
+		}
+	}
+
+	// 判断是否可以使用基于ID的分页
+	useIdBasedPagination := false
+	var primaryKeyName string = ""
+	if primaryKeyCount == 1 && primaryKeyColumn != nil {
+		// 检查主键类型是否为整数类型
+		typeLower := strings.ToLower(primaryKeyColumn.Type)
+		if strings.Contains(typeLower, "int") || strings.Contains(typeLower, "serial") ||
+			strings.Contains(typeLower, "bigint") || strings.Contains(typeLower, "smallint") ||
+			strings.Contains(typeLower, "tinyint") || strings.Contains(typeLower, "mediumint") {
+			useIdBasedPagination = true
+			primaryKeyName = primaryKeyColumn.Name
+		}
+	}
+
+	var data []map[string]interface{}
+	var total int64
+	var nextId interface{} = nil
+
+	if useIdBasedPagination {
+		// 使用基于ID的分页
+		// direction: "next"表示下一页（id > lastId），"prev"表示上一页（id < lastId）
+		data, total, nextId, err = session.db.GetTableDataByID(tableName, primaryKeyName, lastId, pageSize, direction)
+		if err != nil {
+			// 如果基于ID的分页失败，回退到传统分页
+			data, total, err = session.db.GetTableData(tableName, page, pageSize)
+			useIdBasedPagination = false
+		}
+	} else {
+		// 使用传统OFFSET/LIMIT分页
+		data, total, err = session.db.GetTableData(tableName, page, pageSize)
+	}
+
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取数据失败: %v", err))
+		return
+	}
+
+	// 如果使用基于ID的分页，从结果中提取ID
+	if useIdBasedPagination && nextId == nil && len(data) > 0 {
+		if direction == "prev" {
+			// 上一页：nextId应该是当前页的第一个ID（用于继续向前翻页）
+			if idVal, ok := data[0][primaryKeyName]; ok {
+				nextId = idVal
+			}
+		} else {
+			// 下一页：nextId应该是当前页的最后一个ID
+			if idVal, ok := data[len(data)-1][primaryKeyName]; ok {
+				nextId = idVal
+			}
+		}
+	}
+
+	// 检查是否还有下一页（基于ID分页时，如果返回的数据少于pageSize，说明没有下一页了）
+	hasNextPage := true
+	if useIdBasedPagination {
+		hasNextPage = len(data) >= pageSize && nextId != nil
+	}
+
 	// 检查是否为 ClickHouse（不支持分页）
 	isClickHouse := session.dbType == "clickhouse"
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	response := map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
 			"data":    data,
@@ -929,7 +1012,101 @@ func (s *Server) GetTableData(w http.ResponseWriter, r *http.Request) {
 		"total":        total,
 		"page":         page,
 		"pageSize":     pageSize,
-		"isClickHouse": isClickHouse, // 标识是否为 ClickHouse
+		"isClickHouse": isClickHouse,
+	}
+
+	// 如果使用基于ID的分页，添加相关信息
+	if useIdBasedPagination {
+		response["useIdPagination"] = true
+		response["primaryKey"] = primaryKeyName
+		if nextId != nil {
+			response["nextId"] = nextId
+		}
+		response["hasNextPage"] = hasNextPage
+		// 如果是上一页，还需要返回当前页的第一个ID（用于继续向前翻页）
+		if direction == "prev" && len(data) > 0 {
+			if firstId, ok := data[0][primaryKeyName]; ok {
+				response["firstId"] = firstId
+			}
+		}
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetPageId 根据页码获取该页的起始ID（用于基于ID分页的页码跳转）
+func (s *Server) GetPageId(w http.ResponseWriter, r *http.Request) {
+	connectionID := getConnectionID(r)
+	if connectionID == "" {
+		writeJSONError(w, http.StatusBadRequest, "缺少连接ID")
+		return
+	}
+
+	tableName := r.URL.Query().Get("table")
+	if tableName == "" {
+		writeJSONError(w, http.StatusBadRequest, "缺少表名参数")
+		return
+	}
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 {
+		pageSize = 50
+	}
+
+	session, err := s.getSession(connectionID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// 获取列信息，检查是否有单个整数主键
+	columns, err := session.db.GetTableColumns(tableName)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取列信息失败: %v", err))
+		return
+	}
+
+	// 检查是否有单个整数主键ID
+	var primaryKeyColumn *database.ColumnInfo = nil
+	primaryKeyCount := 0
+	for i := range columns {
+		if columns[i].Key == "PRI" {
+			primaryKeyCount++
+			primaryKeyColumn = &columns[i]
+		}
+	}
+
+	// 判断是否可以使用基于ID的分页
+	if primaryKeyCount != 1 || primaryKeyColumn == nil {
+		writeJSONError(w, http.StatusBadRequest, "表没有单个主键，不支持基于ID的分页")
+		return
+	}
+
+	// 检查主键类型是否为整数类型
+	typeLower := strings.ToLower(primaryKeyColumn.Type)
+	if !strings.Contains(typeLower, "int") && !strings.Contains(typeLower, "serial") &&
+		!strings.Contains(typeLower, "bigint") && !strings.Contains(typeLower, "smallint") &&
+		!strings.Contains(typeLower, "tinyint") && !strings.Contains(typeLower, "mediumint") {
+		writeJSONError(w, http.StatusBadRequest, "主键不是整数类型，不支持基于ID的分页")
+		return
+	}
+
+	// 获取指定页码的ID
+	pageId, err := session.db.GetPageIdByPageNumber(tableName, primaryKeyColumn.Name, page, pageSize)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("获取页码ID失败: %v", err))
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"pageId":  pageId,
+		"page":    page,
 	})
 }
 
@@ -1364,6 +1541,7 @@ func (s *Server) RegisterRoutes(router Router) {
 	router.HandleFunc("/api/table/schema", s.GetTableSchema)
 	router.HandleFunc("/api/table/columns", s.GetTableColumns)
 	router.HandleFunc("/api/table/data", s.GetTableData)
+	router.HandleFunc("/api/table/page-id", s.GetPageId)
 	router.HandleFunc("/api/table/export", s.ExportTableDataToExcel)
 	router.POST("/api/query", s.ExecuteQuery)
 	router.POST("/api/query/export", s.ExportQueryResultsToExcel)

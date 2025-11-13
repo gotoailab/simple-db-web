@@ -245,6 +245,16 @@ func (c *ClickHouse) GetTableData(tableName string, page, pageSize int) ([]map[s
 	return results, -1, rows.Err()
 }
 
+// GetTableDataByID 基于主键ID获取表数据（ClickHouse不支持，返回错误）
+func (c *ClickHouse) GetTableDataByID(tableName string, primaryKey string, lastId interface{}, pageSize int, direction string) ([]map[string]interface{}, int64, interface{}, error) {
+	return nil, 0, nil, fmt.Errorf("ClickHouse 不支持基于ID的分页")
+}
+
+// GetPageIdByPageNumber 根据页码计算该页的起始ID（ClickHouse不支持，返回错误）
+func (c *ClickHouse) GetPageIdByPageNumber(tableName string, primaryKey string, page, pageSize int) (interface{}, error) {
+	return nil, fmt.Errorf("ClickHouse 不支持基于ID的分页")
+}
+
 // GetDatabases 获取所有数据库名称
 func (c *ClickHouse) GetDatabases() ([]string, error) {
 	rows, err := c.db.Query("SELECT name FROM system.databases WHERE name NOT IN ('system', 'information_schema', 'INFORMATION_SCHEMA')")

@@ -59,10 +59,11 @@ const i18n = {
             'proxy.host': 'Proxy Host',
             'proxy.port': 'Proxy Port',
             'proxy.user': 'Proxy Username',
-            'proxy.password': 'Proxy Password',
-            'proxy.key': 'SSH Private Key (optional, base64 encoded)',
+            'proxy.password': 'Proxy Password (optional, not required if private key is provided)',
+            'proxy.key': 'SSH Private Key (optional, base64 encoded, not required if password is provided)',
             'proxy.keyHint': 'If a private key is provided, key authentication will be prioritized',
             'proxy.required': 'Please fill in proxy host and username',
+            'proxy.authRequired': 'Please provide either password or private key for SSH authentication',
             
             // 数据库和表
             'db.select': 'Select Database',
@@ -196,10 +197,11 @@ const i18n = {
             'proxy.host': '代理主机',
             'proxy.port': '代理端口',
             'proxy.user': '代理用户名',
-            'proxy.password': '代理密码',
-            'proxy.key': 'SSH私钥（可选，base64编码）',
+            'proxy.password': '代理密码（可选，如果提供了私钥则不需要）',
+            'proxy.key': 'SSH私钥（可选，base64编码，如果提供了密码则不需要）',
             'proxy.keyHint': '如果提供了私钥，将优先使用私钥认证',
             'proxy.required': '请填写代理主机和用户名',
+            'proxy.authRequired': '请提供密码或私钥用于SSH认证',
             
             // 数据库和表
             'db.select': '选择数据库',
@@ -341,10 +343,11 @@ const i18n = {
             'proxy.host': '代理主機',
             'proxy.port': '代理埠號',
             'proxy.user': '代理使用者名稱',
-            'proxy.password': '代理密碼',
-            'proxy.key': 'SSH私鑰（可選，base64編碼）',
+            'proxy.password': '代理密碼（可選，如果提供了私鑰則不需要）',
+            'proxy.key': 'SSH私鑰（可選，base64編碼，如果提供了密碼則不需要）',
             'proxy.keyHint': '如果提供了私鑰，將優先使用私鑰認證',
             'proxy.required': '請填寫代理主機和使用者名稱',
+            'proxy.authRequired': '請提供密碼或私鑰用於SSH認證',
             
             // 数据库和表
             'db.select': '選擇資料庫',
@@ -618,6 +621,14 @@ let currentDeleteWhere = null;
 let connectionId = null; // 当前连接的ID
 let connectionInfo = null; // 当前连接信息
 let currentDbType = null; // 当前数据库类型
+// 基于ID分页的状态
+let useIdPagination = false; // 是否使用基于ID的分页
+let primaryKey = null; // 主键列名
+let lastId = null; // 上一页的最后一个ID（用于基于ID的分页）
+let firstId = null; // 当前页的第一个ID（用于上一页翻页）
+let pageIdMap = new Map(); // 页码到ID的映射（用于跳转到指定页码）
+let idHistory = []; // ID历史栈：[page1FirstId, page2FirstId, page3FirstId, ...]
+let maxVisitedPage = 0; // 已访问过的最大页码（用于判断方向）
 
 // API 基础路径，动态获取以支持路由前缀
 // 获取当前页面的基础路径（去掉文件名，保留路径部分）
@@ -1685,8 +1696,17 @@ async function handleConnect() {
             });
         }
         
+        // 验证必填字段：主机和用户名
         if (!proxyConfig.host || !proxyConfig.user) {
             showNotification(t('proxy.required'), 'error');
+            return;
+        }
+        
+        // 验证认证方式：至少需要密码或私钥之一
+        const hasPassword = proxyConfig.password && proxyConfig.password.trim() !== '';
+        const hasKey = proxyKeyData && proxyKeyData.value && proxyKeyData.value.trim() !== '';
+        if (!hasPassword && !hasKey) {
+            showNotification(t('proxy.authRequired'), 'error');
             return;
         }
         
@@ -2189,6 +2209,14 @@ async function selectTable(tableName) {
     
     currentTable = tableName;
     currentPage = 1;
+    // 重置基于ID分页的状态
+    useIdPagination = false;
+    primaryKey = null;
+    lastId = null;
+    firstId = null;
+    pageIdMap.clear();
+    idHistory = [];
+    maxVisitedPage = 0;
     
     // 切换到数据标签页
     switchTab('data');
@@ -2224,8 +2252,28 @@ async function loadTableData() {
             currentColumns = columnsData.columns.map(col => col.name);
         }
         
+        // 构建请求URL
+        let url = `${API_BASE}/table/data?table=${currentTable}&page=${currentPage}&pageSize=${pageSize}`;
+        // 如果使用基于ID的分页，添加lastId和direction参数
+        if (useIdPagination) {
+            // 判断方向：
+            // 1. 第一页：不需要lastId，direction默认为next
+            // 2. 向前翻页（currentPage < maxVisitedPage）：使用idHistory[currentPage-1]，direction=prev
+            // 3. 向后翻页（currentPage > maxVisitedPage）：使用lastId，direction=next
+            if (currentPage === 1) {
+                // 第一页：不需要lastId，direction默认为next
+                // 不添加参数
+            } else if (currentPage < maxVisitedPage && idHistory[currentPage - 1] !== undefined && idHistory[currentPage - 1] !== null) {
+                // 向前翻页（上一页）：使用目标页的firstId作为lastId，direction=prev
+                url += `&lastId=${encodeURIComponent(idHistory[currentPage - 1])}&direction=prev`;
+            } else if (lastId !== null) {
+                // 向后翻页（下一页）：使用lastId，direction=next
+                url += `&lastId=${encodeURIComponent(lastId)}&direction=next`;
+            }
+        }
+        
         // 然后获取数据
-        const response = await apiRequest(`${API_BASE}/table/data?table=${currentTable}&page=${currentPage}&pageSize=${pageSize}`);
+        const response = await apiRequest(url);
         const data = await response.json();
         
         if (!response.ok || !data.success) {
@@ -2241,6 +2289,54 @@ async function loadTableData() {
         }
         
         if (data.success) {
+            // 检查是否使用基于ID的分页
+            if (data.useIdPagination) {
+                useIdPagination = true;
+                primaryKey = data.primaryKey;
+                
+                // 保存当前页的ID信息
+                if (data.firstId !== undefined && data.firstId !== null) {
+                    firstId = data.firstId;
+                } else if (data.data && data.data.data && data.data.data.length > 0) {
+                    // 如果没有firstId，从数据中提取第一个ID
+                    firstId = data.data.data[0][primaryKey];
+                }
+                
+                if (data.nextId !== undefined && data.nextId !== null) {
+                    lastId = data.nextId;
+                } else if (data.data && data.data.data && data.data.data.length > 0) {
+                    // 如果没有nextId，从数据中提取最后一个ID
+                    const lastRow = data.data.data[data.data.data.length - 1];
+                    lastId = lastRow[primaryKey];
+                }
+                
+                // 更新ID历史栈
+                // 确保历史栈长度足够
+                while (idHistory.length < currentPage) {
+                    idHistory.push(null);
+                }
+                // 更新当前页的firstId
+                if (firstId !== null && firstId !== undefined) {
+                    idHistory[currentPage - 1] = firstId;
+                }
+                
+                // 更新已访问过的最大页码
+                if (currentPage > maxVisitedPage) {
+                    maxVisitedPage = currentPage;
+                }
+                
+                // 保存页码到ID的映射（用于跳转）
+                if (lastId !== null) {
+                    pageIdMap.set(currentPage, lastId);
+                }
+            } else {
+                useIdPagination = false;
+                primaryKey = null;
+                lastId = null;
+                firstId = null;
+                idHistory = [];
+            }
+            
             // 按照 data.columns 的顺序显示数据
             const dataByColumns = [];
             const columns = data.data.columns;            
@@ -2255,7 +2351,19 @@ async function loadTableData() {
             // 检查是否为 ClickHouse
             const isClickHouse = data.isClickHouse || false;
             displayTableData(dataByColumns, data.total, isClickHouse);
-            updatePagination(data.total, data.page, data.pageSize, isClickHouse);
+            
+            // 计算是否有下一页
+            let hasNextPage = true;
+            if (useIdPagination) {
+                // 基于ID分页：使用后端返回的hasNextPage
+                hasNextPage = data.hasNextPage !== false;
+            } else {
+                // 传统分页：根据总页数判断
+                const totalPages = Math.ceil(data.total / data.pageSize);
+                hasNextPage = data.page < totalPages;
+            }
+            
+            updatePagination(data.total, data.page, data.pageSize, isClickHouse, useIdPagination, hasNextPage);
             
             // 显示导出按钮并更新翻译
             if (exportDataBtn) {
@@ -2401,7 +2509,7 @@ function displayTableData(rows, total, isClickHouse = false) {
 }
 
 // 更新分页
-function updatePagination(total, page, pageSize, isClickHouse = false) {
+function updatePagination(total, page, pageSize, isClickHouse = false, useIdPagination = false, hasNextPage = true) {
     if (isClickHouse) {
         // ClickHouse 不支持分页，只显示提示信息
         paginationInfo.textContent = t('data.clickhouseNoPagination');
@@ -2424,24 +2532,121 @@ function updatePagination(total, page, pageSize, isClickHouse = false) {
     paginationInfo.textContent = t('data.total', { total, page, totalPages });
     
     let paginationHTML = '';
-    // 上一页按钮：第一页或没有数据时禁用
-    const prevDisabled = page === 1 || total === 0;
-    paginationHTML += `<button ${prevDisabled ? 'disabled' : ''} onclick="changePage(${page - 1})">${t('data.prevPage')}</button>`;
     
-    // 页码按钮
-    for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
-        paginationHTML += `<button class="${i === page ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+    if (useIdPagination) {
+        // 基于ID的分页：显示上一页/下一页按钮和页码按钮
+        // 上一页按钮：第一页时禁用，或者历史栈中没有前一页的ID
+        const prevDisabled = page === 1 || (page > 1 && (idHistory.length < page - 1 || idHistory[page - 2] === undefined || idHistory[page - 2] === null));
+        paginationHTML += `<button ${prevDisabled ? 'disabled' : ''} onclick="changePage(${page - 1})">${t('data.prevPage')}</button>`;
+        
+        // 页码按钮（显示当前页前后2页）
+        const startPage = Math.max(1, page - 2);
+        const endPage = Math.min(totalPages, page + 2);
+        for (let i = startPage; i <= endPage; i++) {
+            if (i === page) {
+                // 当前页：禁用点击，不添加onclick
+                paginationHTML += `<button class="active" disabled>${i}</button>`;
+            } else {
+                paginationHTML += `<button onclick="changePage(${i})">${i}</button>`;
+            }
+        }
+        
+        // 下一页按钮：检查是否有下一页
+        const nextDisabled = !hasNextPage;
+        paginationHTML += `<button ${nextDisabled ? 'disabled' : ''} onclick="changePage(${page + 1})">${t('data.nextPage')}</button>`;
+    } else {
+        // 传统分页：显示页码按钮
+        // 上一页按钮：第一页或没有数据时禁用
+        const prevDisabled = page === 1 || total === 0;
+        paginationHTML += `<button ${prevDisabled ? 'disabled' : ''} onclick="changePage(${page - 1})">${t('data.prevPage')}</button>`;
+        
+        // 页码按钮
+        for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+            if (i === page) {
+                // 当前页：禁用点击，不添加onclick
+                paginationHTML += `<button class="active" disabled>${i}</button>`;
+            } else {
+                paginationHTML += `<button onclick="changePage(${i})">${i}</button>`;
+            }
+        }
+        
+        // 下一页按钮：最后一页或没有数据时禁用
+        const nextDisabled = page >= totalPages || total === 0;
+        paginationHTML += `<button ${nextDisabled ? 'disabled' : ''} onclick="changePage(${page + 1})">${t('data.nextPage')}</button>`;
     }
     
-    // 下一页按钮：最后一页或没有数据时禁用
-    const nextDisabled = page >= totalPages || total === 0;
-    paginationHTML += `<button ${nextDisabled ? 'disabled' : ''} onclick="changePage(${page + 1})">${t('data.nextPage')}</button>`;
     pagination.innerHTML = paginationHTML;
 }
 
 // 切换页码
-function changePage(page) {
-    currentPage = page;
+async function changePage(page) {
+    // 如果使用基于ID的分页，需要特殊处理
+    if (useIdPagination) {
+        if (page < currentPage) {
+            // 向前翻页：使用ID历史栈
+            if (page === 1) {
+                lastId = null;
+                firstId = null;
+                currentPage = 1;
+            } else if (idHistory[page - 1] !== undefined && idHistory[page - 1] !== null) {
+                // 如果历史栈中有该页的ID，直接使用
+                firstId = idHistory[page - 1];
+                // 对于prev方向，使用目标页的firstId作为lastId
+                lastId = firstId;
+                currentPage = page;
+            } else {
+                // 如果历史栈中没有，需要从后端获取该页的ID
+                try {
+                    const response = await apiRequest(`${API_BASE}/table/page-id?table=${currentTable}&page=${page}&pageSize=${pageSize}`);
+                    const data = await response.json();
+                    if (data.success && data.pageId !== null && data.pageId !== undefined) {
+                        lastId = data.pageId;
+                        currentPage = page;
+                    } else {
+                        showNotification('无法跳转到该页码', 'error');
+                        return;
+                    }
+                } catch (error) {
+                    showNotification('获取页码ID失败: ' + error.message, 'error');
+                    return;
+                }
+            }
+        } else if (page > currentPage) {
+            // 向后翻页：如果历史栈中有目标页的ID，使用它；否则从后端获取该页的ID
+            if (idHistory[page - 1] !== undefined && idHistory[page - 1] !== null) {
+                // 历史栈中有，说明之前访问过，直接使用
+                firstId = idHistory[page - 1];
+                // 使用历史栈中保存的lastId，或者从pageIdMap获取
+                lastId = pageIdMap.get(page - 1) || lastId;
+                currentPage = page;
+            } else {
+                // 历史栈中没有，需要从后端获取该页的ID
+                try {
+                    const response = await apiRequest(`${API_BASE}/table/page-id?table=${currentTable}&page=${page}&pageSize=${pageSize}`);
+                    const data = await response.json();
+                    if (data.success && data.pageId !== null && data.pageId !== undefined) {
+                        lastId = data.pageId;
+                        currentPage = page;
+                    } else {
+                        // 如果获取失败，尝试使用当前的lastId继续加载（可能是连续翻页）
+                        currentPage = page;
+                    }
+                } catch (error) {
+                    // 获取失败，尝试使用当前的lastId继续加载
+                    console.warn('获取页码ID失败，使用当前lastId:', error);
+                    currentPage = page;
+                }
+            }
+        } else {
+            // 同一页，不需要操作
+            return;
+        }
+    } else {
+        // 传统分页
+        currentPage = page;
+        lastId = null; // 重置lastId
+        firstId = null;
+    }
     loadTableData();
 }
 
@@ -2450,6 +2655,9 @@ pageSizeSelect.addEventListener('change', (e) => {
     const newPageSize = parseInt(e.target.value);
     pageSize = newPageSize;
     currentPage = 1; // 重置到第一页
+    // 重置基于ID分页的状态
+    lastId = null;
+    pageIdMap.clear();
     loadTableData();
 });
 

@@ -19,11 +19,30 @@ func main() {
 	}
 
 	// 添加自定义数据库类型
-	// 示例1：添加一个自定义的 MySQL 变体
+	// 示例1：添加一个自定义的 MySQL 变体（使用默认显示名称，即类型名）
 	server.AddDatabase("custom_mysql", func() database.Database {
 		// 这里可以返回任何实现了 database.Database 接口的类型
 		// 例如：可以包装 MySQL 并添加自定义逻辑
 		return database.NewMySQL()
+	})
+
+	// 示例1.1：添加自定义数据库类型并指定显示名称
+	server.AddDatabaseWithDisplayName("custom_mysql_v2", "自定义MySQL变体", func() database.Database {
+		return database.NewMySQL()
+	})
+
+	// 使用 AddDatabaseWithDisplayName 添加自定义数据库类型并指定显示名称
+	server.AddDatabaseWithDisplayName("mysql_based_dameng", "达梦", func() database.Database {
+		return database.NewBaseMysqlBasedDB("dameng")
+	})
+	server.AddDatabaseWithDisplayName("mysql_based_openguass", "OpenGauss", func() database.Database {
+		return database.NewBaseMysqlBasedDB("openguass")
+	})
+	server.AddDatabaseWithDisplayName("mysql_based_vastbase", "Vastbase", func() database.Database {
+		return database.NewBaseMysqlBasedDB("vastbase")
+	})
+	server.AddDatabaseWithDisplayName("mysql_based_kingbase", "人大金仓", func() database.Database {
+		return database.NewBaseMysqlBasedDB("kingbase")
 	})
 
 	// 示例2：添加另一个自定义数据库类型

@@ -167,19 +167,20 @@ func (m *MemorySessionStorage) Close() error {
 
 // Server 服务器结构
 type Server struct {
-	templates         *template.Template
-	sessionStorage    SessionStorage                // 会话存储接口
-	sessions          map[string]*ConnectionSession // 运行时会话缓存（包含实际连接）
-	sessionsMutex     sync.RWMutex
-	customDatabases   map[string]DatabaseFactory // 自定义数据库类型
-	customDbMutex     sync.RWMutex
-	customProxies     map[string]ProxyFactory // 自定义代理类型
-	customProxyMutex  sync.RWMutex
-	builtinTypes      map[string]string // 内置数据库类型及其显示名称
-	customScript      string            // 自定义JavaScript脚本，会在页面加载后执行
-	customScriptMutex sync.RWMutex      // 保护customScript的读写锁
-	validators        []SQLValidator    // SQL校验器列表
-	validatorsMutex   sync.RWMutex      // 保护validators的读写锁
+	templates            *template.Template
+	sessionStorage       SessionStorage                // 会话存储接口
+	sessions             map[string]*ConnectionSession // 运行时会话缓存（包含实际连接）
+	sessionsMutex        sync.RWMutex
+	customDatabases      map[string]DatabaseFactory // 自定义数据库类型
+	customDbDisplayNames map[string]string          // 自定义数据库类型的显示名称
+	customDbMutex        sync.RWMutex
+	customProxies        map[string]ProxyFactory // 自定义代理类型
+	customProxyMutex     sync.RWMutex
+	builtinTypes         map[string]string // 内置数据库类型及其显示名称
+	customScript         string            // 自定义JavaScript脚本，会在页面加载后执行
+	customScriptMutex    sync.RWMutex      // 保护customScript的读写锁
+	validators           []SQLValidator    // SQL校验器列表
+	validatorsMutex      sync.RWMutex      // 保护validators的读写锁
 }
 
 // NewServer 创建新的服务器实例
@@ -195,25 +196,21 @@ func NewServer() (*Server, error) {
 	// 初始化内置数据库类型
 	builtinTypes := map[string]string{
 		"mysql":      "MySQL",
-		"postgres":   "PostgreSQL",
 		"postgresql": "PostgreSQL",
 		"sqlite":     "SQLite",
 		"clickhouse": "ClickHouse",
-		"dameng":     "达梦",
-		"openguass":  "OpenGauss",
-		"vastbase":   "Vastbase",
-		"kingbase":   "人大金仓",
-		"oceandb":    "OceanDB",
+		"oceandb":    "OceanBase",
 	}
 
 	server := &Server{
-		templates:       tmpl,
-		sessionStorage:  NewMemorySessionStorage(), // 默认使用内存存储
-		sessions:        make(map[string]*ConnectionSession),
-		customDatabases: make(map[string]DatabaseFactory),
-		customProxies:   make(map[string]ProxyFactory),
-		builtinTypes:    builtinTypes,
-		validators:      make([]SQLValidator, 0),
+		templates:            tmpl,
+		sessionStorage:       NewMemorySessionStorage(), // 默认使用内存存储
+		sessions:             make(map[string]*ConnectionSession),
+		customDatabases:      make(map[string]DatabaseFactory),
+		customDbDisplayNames: make(map[string]string),
+		customProxies:        make(map[string]ProxyFactory),
+		builtinTypes:         builtinTypes,
+		validators:           make([]SQLValidator, 0),
 	}
 
 	// 注册默认的SSH代理
@@ -250,6 +247,22 @@ func (s *Server) AddDatabase(name string, factory DatabaseFactory) {
 	s.customDbMutex.Lock()
 	defer s.customDbMutex.Unlock()
 	s.customDatabases[name] = factory
+}
+
+// AddDatabaseWithDisplayName 添加自定义数据库类型并指定显示名称
+// name: 数据库类型标识（如 "custom_db"）
+// displayName: 显示名称（如 "自定义数据库"）
+// factory: 创建数据库实例的工厂函数
+// 示例：
+//
+//	server.AddDatabaseWithDisplayName("dameng", "达梦数据库", func() database.Database {
+//	    return database.NewBaseMysqlBasedDB("dameng")
+//	})
+func (s *Server) AddDatabaseWithDisplayName(name string, displayName string, factory DatabaseFactory) {
+	s.customDbMutex.Lock()
+	defer s.customDbMutex.Unlock()
+	s.customDatabases[name] = factory
+	s.customDbDisplayNames[name] = displayName
 }
 
 // AddProxy 添加自定义代理类型
@@ -311,10 +324,14 @@ func (s *Server) GetDatabaseTypes(w http.ResponseWriter, r *http.Request) {
 	for dbType := range s.customDatabases {
 		// 如果自定义类型不在内置类型中，添加它
 		if _, exists := s.builtinTypes[dbType]; !exists {
-			// 使用类型名作为显示名称，或者可以扩展为支持自定义显示名称
+			// 优先使用自定义显示名称，如果没有则使用类型名
+			displayName := dbType
+			if customDisplayName, hasCustomName := s.customDbDisplayNames[dbType]; hasCustomName {
+				displayName = customDisplayName
+			}
 			types = append(types, DatabaseTypeInfo{
 				Type:        dbType,
-				DisplayName: dbType, // 可以后续扩展支持自定义显示名称
+				DisplayName: displayName,
 			})
 		}
 	}
@@ -374,14 +391,6 @@ func (s *Server) createDatabaseFromSessionData(data *SessionData) (database.Data
 			db = database.NewMySQL()
 		case "clickhouse":
 			db = database.NewClickHouse()
-		case "dameng":
-			db = database.NewBaseMysqlBasedDB("dameng")
-		case "openguass":
-			db = database.NewBaseMysqlBasedDB("openguass")
-		case "vastbase":
-			db = database.NewBaseMysqlBasedDB("vastbase")
-		case "kingbase":
-			db = database.NewBaseMysqlBasedDB("kingbase")
 		case "oceandb":
 			db = database.NewBaseMysqlBasedDB("oceandb")
 		case "sqlite":
@@ -411,8 +420,7 @@ func (s *Server) createDatabaseFromSessionData(data *SessionData) (database.Data
 	// 如果有代理，使用代理包装器
 	if proxy != nil {
 		// 目前只支持MySQL及其兼容数据库的代理连接
-		if data.DbType == "mysql" || data.DbType == "dameng" || data.DbType == "openguass" ||
-			data.DbType == "vastbase" || data.DbType == "kingbase" || data.DbType == "oceandb" {
+		if data.DbType == "mysql" || strings.HasPrefix(data.DbType, "mysql_based_") || data.DbType == "oceandb" {
 			// MySQL及其兼容数据库使用代理包装器
 			db = NewProxyDatabaseWrapper(db, proxy)
 		} else {
@@ -643,14 +651,6 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 			db = database.NewMySQL()
 		case "clickhouse":
 			db = database.NewClickHouse()
-		case "dameng":
-			db = database.NewBaseMysqlBasedDB("dameng")
-		case "openguass":
-			db = database.NewBaseMysqlBasedDB("openguass")
-		case "vastbase":
-			db = database.NewBaseMysqlBasedDB("vastbase")
-		case "kingbase":
-			db = database.NewBaseMysqlBasedDB("kingbase")
 		case "oceandb":
 			db = database.NewBaseMysqlBasedDB("oceandb")
 		case "sqlite":
@@ -706,8 +706,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	if proxy != nil {
 		// 目前只支持MySQL及其兼容数据库的代理连接
 		// 其他数据库类型的代理支持需要进一步实现
-		if info.Type == "mysql" || info.Type == "dameng" || info.Type == "openguass" ||
-			info.Type == "vastbase" || info.Type == "kingbase" || info.Type == "oceandb" {
+		if info.Type == "mysql" || strings.HasPrefix(info.Type, "mysql_based_") || info.Type == "oceandb" {
 			// MySQL及其兼容数据库使用代理包装器
 			db = NewProxyDatabaseWrapper(db, proxy)
 		} else {

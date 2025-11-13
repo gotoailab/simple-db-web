@@ -902,6 +902,15 @@ function saveConnection(connectionInfo) {
             connectionToSave.passwordEncrypted = true;
         }
         
+        // 如果使用代理，加密代理密码
+        if (connectionToSave.proxy && connectionToSave.proxy.password) {
+            connectionToSave.proxy = {
+                ...connectionToSave.proxy,
+                password: encryptPassword(connectionToSave.proxy.password),
+                passwordEncrypted: true
+            };
+        }
+        
         if (existingIndex >= 0) {
             // 更新已存在的连接
             const existingConn = saved[existingIndex];
@@ -909,6 +918,20 @@ function saveConnection(connectionInfo) {
             if (!connectionToSave.password && existingConn.password) {
                 connectionToSave.password = existingConn.password;
                 connectionToSave.passwordEncrypted = existingConn.passwordEncrypted;
+            }
+            // 如果新连接没有代理密码字段，保留旧的代理密码和 passwordEncrypted 字段
+            if (connectionToSave.proxy && existingConn.proxy) {
+                if (!connectionToSave.proxy.password && existingConn.proxy.password) {
+                    connectionToSave.proxy.password = existingConn.proxy.password;
+                    connectionToSave.proxy.passwordEncrypted = existingConn.proxy.passwordEncrypted;
+                }
+                // 如果新连接没有私钥，保留旧的私钥
+                if (!connectionToSave.proxy.config && existingConn.proxy.config) {
+                    connectionToSave.proxy.config = existingConn.proxy.config;
+                }
+            } else if (existingConn.proxy && !connectionToSave.proxy) {
+                // 如果旧连接有代理配置但新连接没有，保留旧的代理配置
+                connectionToSave.proxy = existingConn.proxy;
             }
             saved[existingIndex] = connectionToSave;
         } else {
@@ -1055,6 +1078,53 @@ async function connectWithSavedConnection(savedConn) {
         
         dsnGroup.style.display = 'none';
         formGroup.style.display = 'block';
+    }
+    
+    // 处理代理配置（如果存在）
+    if (savedConn.proxy) {
+        // 显示代理配置区域
+        if (useProxy) {
+            useProxy.checked = true;
+            proxyGroup.style.display = 'block';
+        }
+        
+        // 填充代理配置
+        if (proxyType) proxyType.value = savedConn.proxy.type || 'ssh';
+        if (proxyHost) proxyHost.value = savedConn.proxy.host || '';
+        if (proxyPort) proxyPort.value = savedConn.proxy.port || '22';
+        if (proxyUser) proxyUser.value = savedConn.proxy.user || '';
+        
+        // 解密代理密码
+        let proxyPasswordValue = '';
+        if (savedConn.proxy.passwordEncrypted) {
+            proxyPasswordValue = decryptPassword(savedConn.proxy.password);
+        } else {
+            proxyPasswordValue = savedConn.proxy.password || '';
+        }
+        if (proxyPassword) proxyPassword.value = proxyPasswordValue;
+        
+        // 处理私钥（从config中提取）
+        if (savedConn.proxy.config) {
+            try {
+                const config = JSON.parse(savedConn.proxy.config);
+                if (config.key_data && proxyKeyData) {
+                    proxyKeyData.value = config.key_data;
+                }
+            } catch (e) {
+                console.warn('解析代理配置失败:', e);
+            }
+        }
+        
+        // 将代理配置添加到连接信息中
+        connectionInfo.proxy = {
+            type: savedConn.proxy.type || 'ssh',
+            host: savedConn.proxy.host || '',
+            port: savedConn.proxy.port || '22',
+            user: savedConn.proxy.user || '',
+            password: proxyPasswordValue,
+            key_file: '',
+            config: savedConn.proxy.config || ''
+        };
     }
     
     // 直接执行连接逻辑，避免重复提交
@@ -1765,7 +1835,8 @@ async function handleConnect() {
             if (rememberConnection && rememberConnection.checked) {
                 const connectionToSave = {
                     ...connInfo,
-                    password: mode === 'form' ? (document.getElementById('password')?.value || '') : ''
+                    password: mode === 'form' ? (document.getElementById('password')?.value || '') : '',
+                    proxy: connectionInfo.proxy || null // 包含完整的代理配置（密码和私钥）
                 };
                 saveConnection(connectionToSave);
             }
@@ -1994,11 +2065,7 @@ function updateConnectionInfo(info) {
             'postgres': 'PostgreSQL',
             'postgresql': 'PostgreSQL',
             'sqlite': 'SQLite',
-            'dameng': '达梦',
-            'openguass': 'OpenGauss',
-            'vastbase': 'Vastbase',
-            'kingbase': '人大金仓',
-            'oceandb': 'OceanDB'
+            'oceandb': 'OceanBase'
         };
         dbTypeName = dbTypeNames[info.type] || info.type;
     }

@@ -52,6 +52,8 @@ const i18n = {
             'connection.noActiveConn': 'No active connection',
             'connection.id': 'Connection ID',
             'connection.noSaved': 'No saved connections',
+            'connection.sqliteFile': 'Database File Path',
+            'connection.sqliteFileHint': 'Please enter the full path to the SQLite database file',
             
             // 代理
             'proxy.use': 'Use Proxy (SSH, etc.)',
@@ -144,6 +146,7 @@ const i18n = {
             'error.emptySQLQuery': 'SQL query cannot be empty',
             'error.unsupportedSQLType': 'Unsupported SQL type',
             'error.unsupportedDatabaseType': 'Unsupported database type',
+            'error.sqliteFileRequired': 'Please enter SQLite database file path',
             'error.unsupportedProxyType': 'Unsupported proxy type',
             'error.parseRequestFailed': 'Failed to parse request',
             'error.generateConnectionIDFailed': 'Failed to generate connection ID',
@@ -232,6 +235,8 @@ const i18n = {
             'connection.noActiveConn': '没有活动连接',
             'connection.id': '连接ID',
             'connection.noSaved': '暂无保存的连接',
+            'connection.sqliteFile': '数据库文件路径',
+            'connection.sqliteFileHint': '请输入 SQLite 数据库文件的完整路径',
             
             // 代理
             'proxy.use': '使用代理（SSH等）',
@@ -365,6 +370,7 @@ const i18n = {
             'error.clickHouseNoUpdate': 'ClickHouse 不支持 UPDATE 操作',
             'error.clickHouseNoDelete': 'ClickHouse 不支持 DELETE 操作',
             'error.connectionNotExists': '连接不存在或已断开',
+            'error.sqliteFileRequired': '请输入 SQLite 数据库文件路径',
             
             // 语言切换
             'lang.en': 'English',
@@ -420,6 +426,8 @@ const i18n = {
             'connection.noActiveConn': '沒有活動連接',
             'connection.id': '連接ID',
             'connection.noSaved': '暫無儲存的連接',
+            'connection.sqliteFile': '資料庫檔案路徑',
+            'connection.sqliteFileHint': '請輸入 SQLite 資料庫檔案的完整路徑',
             
             // 代理
             'proxy.use': '使用代理（SSH等）',
@@ -553,6 +561,7 @@ const i18n = {
             'error.clickHouseNoUpdate': 'ClickHouse 不支援 UPDATE 操作',
             'error.clickHouseNoDelete': 'ClickHouse 不支援 DELETE 操作',
             'error.connectionNotExists': '連接不存在或已斷開',
+            'error.sqliteFileRequired': '請輸入 SQLite 資料庫檔案路徑',
             
             // 语言切换
             'lang.en': 'English',
@@ -883,6 +892,9 @@ const connectionForm = document.getElementById('connectionForm');
 const connectionMode = document.getElementById('connectionMode');
 const dsnGroup = document.getElementById('dsnGroup');
 const formGroup = document.getElementById('formGroup');
+const sqliteFileGroup = document.getElementById('sqliteFileGroup');
+const normalFormGroup = document.getElementById('normalFormGroup');
+const sqliteFile = document.getElementById('sqliteFile');
 const connectionsPanel = document.getElementById('connectionsPanel');
 const activeConnectionsList = document.getElementById('activeConnectionsList');
 const newConnectionBtn = document.getElementById('newConnectionBtn');
@@ -1140,8 +1152,47 @@ if (useProxy) {
     });
 }
 
+// 数据库类型切换 - 处理 SQLite3 特殊显示
+const dbTypeSelect = document.getElementById('dbType');
+if (dbTypeSelect) {
+    dbTypeSelect.addEventListener('change', (e) => {
+        const dbType = e.target.value;
+        updateFormForDbType(dbType);
+    });
+}
+
+// 更新表单显示（根据数据库类型）
+function updateFormForDbType(dbType) {
+    if (dbType === 'sqlite') {
+        // SQLite3: 只显示文件路径输入框，隐藏其他字段和DSN选项
+        if (sqliteFileGroup) sqliteFileGroup.style.display = 'block';
+        if (normalFormGroup) normalFormGroup.style.display = 'none';
+        if (dsnGroup) dsnGroup.style.display = 'none';
+        if (connectionMode) connectionMode.style.display = 'none';
+        if (formGroup) formGroup.style.display = 'block';
+        // 隐藏代理配置（SQLite3 不需要代理）
+        if (useProxy && useProxy.parentElement) {
+            useProxy.parentElement.style.display = 'none';
+        }
+    } else {
+        // 其他数据库: 显示正常表单
+        if (sqliteFileGroup) sqliteFileGroup.style.display = 'none';
+        if (normalFormGroup) normalFormGroup.style.display = 'block';
+        if (connectionMode) connectionMode.style.display = 'block';
+        // 显示代理配置
+        if (useProxy && useProxy.parentElement) {
+            useProxy.parentElement.style.display = 'block';
+        }
+    }
+}
+
 // 连接模式切换
 connectionMode.addEventListener('change', (e) => {
+    const dbType = dbTypeSelect ? dbTypeSelect.value : '';
+    // SQLite3 不支持 DSN 模式
+    if (dbType === 'sqlite') {
+        return;
+    }
     if (e.target.value === 'dsn') {
         dsnGroup.style.display = 'block';
         formGroup.style.display = 'none';
@@ -1350,8 +1401,12 @@ function loadSavedConnections() {
 
 // 使用保存的连接进行连接
 async function connectWithSavedConnection(savedConn) {
+    const dbType = savedConn.type || 'mysql';
     // 填充表单
-    document.getElementById('dbType').value = savedConn.type || 'mysql';
+    document.getElementById('dbType').value = dbType;
+    
+    // 更新表单显示（根据数据库类型）
+    updateFormForDbType(dbType);
     
     // 填充连接名（如果存在）
     const connectionNameInput = document.getElementById('connectionName');
@@ -1360,7 +1415,7 @@ async function connectWithSavedConnection(savedConn) {
     }
     
     let connectionInfo = {
-        type: savedConn.type || 'mysql'
+        type: dbType
     };
     
     // 如果有连接名，添加到连接信息中
@@ -1368,7 +1423,14 @@ async function connectWithSavedConnection(savedConn) {
         connectionInfo.name = savedConn.name;
     }
     
-    if (savedConn.dsn) {
+    if (dbType === 'sqlite') {
+        // SQLite3 特殊处理：使用 database 字段作为文件路径
+        const filePath = savedConn.database || savedConn.host || '';
+        if (sqliteFile) {
+            sqliteFile.value = filePath;
+        }
+        connectionInfo.database = filePath;
+    } else if (savedConn.dsn) {
         // DSN 模式
         connectionMode.value = 'dsn';
         document.getElementById('dsn').value = savedConn.dsn;
@@ -1479,6 +1541,7 @@ async function connectWithSavedConnection(savedConn) {
                 port: savedConn.port || '3306',
                 user: savedConn.user || '',
                 dsn: savedConn.dsn || '',
+                database: savedConn.database || '',
                 proxy: savedConn.proxy || null
             };
             
@@ -1503,28 +1566,34 @@ async function connectWithSavedConnection(savedConn) {
             updateConnectionInfo(connInfo);
             updateActiveConnectionsList();
             
-            // 检查DSN中是否包含数据库
-            const dsn = connInfo.dsn || '';
-            const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));
-            
-            if (hasDatabaseInDSN) {
-                // DSN中包含数据库,直接使用该数据库
-                databasePanel.style.display = 'block';
-                await loadDatabases(data.databases || []);
-                // 尝试从DSN中提取数据库名
-                const dbMatch = dsn.match(/\/([^\/\?]+)/);
-                if (dbMatch && dbMatch[1]) {
-                    const dbName = dbMatch[1];
-                    // 设置选择器并切换数据库
-                    databaseSelect.value = dbName;
-                    await switchDatabase(dbName);
-                } else {
-                    await loadTables();
-                }
+            // SQLite3 不需要选择数据库，直接加载表
+            if (connInfo.type === 'sqlite') {
+                databasePanel.style.display = 'none'; // SQLite3 不支持多数据库
+                await loadTables();
             } else {
-                // DSN中不包含数据库,显示数据库选择器
-                databasePanel.style.display = 'block';
-                await loadDatabases(data.databases || []);
+                // 检查DSN中是否包含数据库
+                const dsn = connInfo.dsn || '';
+                const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));
+                
+                if (hasDatabaseInDSN) {
+                    // DSN中包含数据库,直接使用该数据库
+                    databasePanel.style.display = 'block';
+                    await loadDatabases(data.databases || []);
+                    // 尝试从DSN中提取数据库名
+                    const dbMatch = dsn.match(/\/([^\/\?]+)/);
+                    if (dbMatch && dbMatch[1]) {
+                        const dbName = dbMatch[1];
+                        // 设置选择器并切换数据库
+                        databaseSelect.value = dbName;
+                        await switchDatabase(dbName);
+                    } else {
+                        await loadTables();
+                    }
+                } else {
+                    // DSN中不包含数据库,显示数据库选择器
+                    databasePanel.style.display = 'block';
+                    await loadDatabases(data.databases || []);
+                }
             }
             showNotification(t('connection.success'), 'success');
         } else {
@@ -2066,7 +2135,16 @@ async function handleConnect() {
     }
     
     // 构建连接信息
-    if (mode === 'dsn') {
+    if (dbType === 'sqlite') {
+        // SQLite3 特殊处理：只需要文件路径
+        const filePath = sqliteFile ? sqliteFile.value.trim() : '';
+        if (!filePath) {
+            showNotification(t('error.sqliteFileRequired'), 'error');
+            return;
+        }
+        // SQLite3 使用 Database 字段存储文件路径
+        connectionInfo.database = filePath;
+    } else if (mode === 'dsn') {
         const dsnInput = document.getElementById('dsn');
         if (dsnInput && dsnInput.value) {
             connectionInfo.dsn = dsnInput.value;
@@ -2090,8 +2168,8 @@ async function handleConnect() {
         connectionInfo.database = '';
     }
     
-    // 构建代理配置（如果启用）
-    if (useProxy && useProxy.checked) {
+    // 构建代理配置（如果启用）- SQLite3 不支持代理
+    if (dbType !== 'sqlite' && useProxy && useProxy.checked) {
         const proxyConfig = {
             type: proxyType ? proxyType.value : 'ssh',
             host: proxyHost ? proxyHost.value : '',
@@ -2153,10 +2231,11 @@ async function handleConnect() {
             const connInfo = {
                 type: dbType,
                 name: connectionName || '',
-                host: mode === 'form' ? (document.getElementById('host')?.value || '') : '',
-                port: mode === 'form' ? (document.getElementById('port')?.value || '3306') : '3306',
-                user: mode === 'form' ? (document.getElementById('user')?.value || '') : '',
-                dsn: mode === 'dsn' ? (document.getElementById('dsn')?.value || '') : '',
+                host: dbType === 'sqlite' ? '' : (mode === 'form' ? (document.getElementById('host')?.value || '') : ''),
+                port: dbType === 'sqlite' ? '' : (mode === 'form' ? (document.getElementById('port')?.value || '3306') : '3306'),
+                user: dbType === 'sqlite' ? '' : (mode === 'form' ? (document.getElementById('user')?.value || '') : ''),
+                dsn: dbType === 'sqlite' ? '' : (mode === 'dsn' ? (document.getElementById('dsn')?.value || '') : ''),
+                database: dbType === 'sqlite' ? (sqliteFile ? sqliteFile.value.trim() : '') : '',
                 proxy: connectionInfo.proxy || null
             };
             
@@ -2185,9 +2264,13 @@ async function handleConnect() {
             if (rememberConnection && rememberConnection.checked) {
                 const connectionToSave = {
                     ...connInfo,
-                    password: mode === 'form' ? (document.getElementById('password')?.value || '') : '',
-                    proxy: connectionInfo.proxy || null // 包含完整的代理配置（密码和私钥）
+                    password: dbType === 'sqlite' ? '' : (mode === 'form' ? (document.getElementById('password')?.value || '') : ''),
+                    proxy: dbType === 'sqlite' ? null : (connectionInfo.proxy || null) // SQLite3 不支持代理
                 };
+                // SQLite3 特殊处理：保存文件路径到 database 字段
+                if (dbType === 'sqlite' && sqliteFile) {
+                    connectionToSave.database = sqliteFile.value.trim();
+                }
                 saveConnection(connectionToSave);
             }
             
@@ -2196,8 +2279,13 @@ async function handleConnect() {
                 newConnectionModal.style.display = 'none';
             }
             
+            // SQLite3 不需要选择数据库，直接加载表
+            if (dbType === 'sqlite') {
+                databasePanel.style.display = 'none'; // SQLite3 不支持多数据库
+                await loadTables();
+            } else {
             // 检查DSN中是否包含数据库
-            const dsn = mode === 'dsn' ? (document.getElementById('dsn')?.value || '') : '';
+                const dsn = mode === 'dsn' ? (document.getElementById('dsn')?.value || '') : '';
             const hasDatabaseInDSN = dsn && (dsn.includes('/') && !dsn.endsWith('/') && !dsn.endsWith('/?'));
             
             if (hasDatabaseInDSN) {
@@ -2216,6 +2304,7 @@ async function handleConnect() {
                 // DSN中不包含数据库,显示数据库选择器
                 databasePanel.style.display = 'block';
                 await loadDatabases(data.databases || []);
+            }
             }
             showNotification(t('connection.success'), 'success');
         } else {
@@ -2973,22 +3062,22 @@ function updatePagination(total, page, pageSize, isClickHouse = false, useIdPagi
         paginationHTML += `<button ${nextDisabled ? 'disabled' : ''} onclick="changePage(${page + 1})">${t('data.nextPage')}</button>`;
     } else {
         // 传统分页：显示页码按钮
-        // 上一页按钮：第一页或没有数据时禁用
-        const prevDisabled = page === 1 || total === 0;
+    // 上一页按钮：第一页或没有数据时禁用
+    const prevDisabled = page === 1 || total === 0;
         paginationHTML += `<button ${prevDisabled ? 'disabled' : ''} onclick="changePage(${page - 1})">${t('data.prevPage')}</button>`;
-        
-        // 页码按钮
-        for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+    
+    // 页码按钮
+    for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
             if (i === page) {
                 // 当前页：禁用点击，不添加onclick
                 paginationHTML += `<button class="active" disabled>${i}</button>`;
             } else {
                 paginationHTML += `<button onclick="changePage(${i})">${i}</button>`;
             }
-        }
-        
-        // 下一页按钮：最后一页或没有数据时禁用
-        const nextDisabled = page >= totalPages || total === 0;
+    }
+    
+    // 下一页按钮：最后一页或没有数据时禁用
+    const nextDisabled = page >= totalPages || total === 0;
         paginationHTML += `<button ${nextDisabled ? 'disabled' : ''} onclick="changePage(${page + 1})">${t('data.nextPage')}</button>`;
     }
     
@@ -3010,7 +3099,7 @@ async function changePage(page) {
                 firstId = idHistory[page - 1];
                 // 对于prev方向，使用目标页的firstId作为lastId
                 lastId = firstId;
-                currentPage = page;
+    currentPage = page;
             } else {
                 // 如果历史栈中没有，需要从后端获取该页的ID
                 try {

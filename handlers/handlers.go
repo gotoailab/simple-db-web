@@ -920,6 +920,8 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	var dsn string
 	if info.Type == "clickhouse" {
 		dsn = database.BuildClickHouseDSN(info)
+	} else if info.Type == "sqlite" {
+		dsn = database.BuildSQLite3DSN(info)
 	} else {
 		dsn = database.BuildDSN(info)
 	}

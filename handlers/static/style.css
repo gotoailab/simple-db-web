@@ -902,6 +902,7 @@ body {
     top: 0;
     min-height: 100%;
     z-index: 3;
+    width: 3.5em; /* 固定行号区域宽度，确保有足够空间显示行号 */
 }
 
 .CodeMirror-linenumber {
@@ -918,6 +919,7 @@ body {
 
 .CodeMirror-lines {
     padding: 8px;
+    padding-left: 3.5em; /* 为行号区域留出空间，避免代码覆盖行号 */
     position: relative;
     min-height: 1px;
 }
@@ -959,6 +961,8 @@ body {
     display: inline-block;
     vertical-align: top;
     margin-bottom: -30px;
+    width: 3.5em; /* 与 gutters 宽度一致 */
+    box-sizing: content-box;
 }
 
 .CodeMirror-gutter-elt {
@@ -967,9 +971,7 @@ body {
     z-index: 4;
 }
 
-.CodeMirror-lines {
-    padding-left: 0;
-}
+/* 移除重复的 padding-left: 0 定义，使用上面定义的 padding-left: 3.5em */
 
 .CodeMirror pre.CodeMirror-line,
 .CodeMirror pre.CodeMirror-line-like {

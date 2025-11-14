@@ -54,6 +54,11 @@ const i18n = {
             'connection.noSaved': 'No saved connections',
             'connection.sqliteFile': 'Database File Path',
             'connection.sqliteFileHint': 'Please enter the full path to the SQLite database file',
+            'connection.edit': 'Edit Connection',
+            'connection.editTitle': 'Edit Database Connection',
+            'connection.saveOnly': 'Save Only',
+            'connection.saveAndConnect': 'Save and Connect',
+            'connection.saved': 'Connection saved successfully',
             
             // 代理
             'proxy.use': 'Use Proxy (SSH, etc.)',
@@ -288,6 +293,11 @@ const i18n = {
             'connection.noSaved': '暂无保存的连接',
             'connection.sqliteFile': '数据库文件路径',
             'connection.sqliteFileHint': '请输入 SQLite 数据库文件的完整路径',
+            'connection.edit': '编辑连接',
+            'connection.editTitle': '编辑数据库连接',
+            'connection.saveOnly': '仅保存',
+            'connection.saveAndConnect': '保存并连接',
+            'connection.saved': '连接保存成功',
             
             // 代理
             'proxy.use': '使用代理（SSH等）',
@@ -532,6 +542,11 @@ const i18n = {
             'connection.noSaved': '暫無儲存的連接',
             'connection.sqliteFile': '資料庫檔案路徑',
             'connection.sqliteFileHint': '請輸入 SQLite 資料庫檔案的完整路徑',
+            'connection.edit': '編輯連接',
+            'connection.editTitle': '編輯資料庫連接',
+            'connection.saveOnly': '僅儲存',
+            'connection.saveAndConnect': '儲存並連接',
+            'connection.saved': '連接儲存成功',
             
             // 代理
             'proxy.use': '使用代理（SSH等）',
@@ -1139,6 +1154,37 @@ const deleteConnectionModal = document.getElementById('deleteConnectionModal');
 const closeDeleteConnectionModal = document.getElementById('closeDeleteConnectionModal');
 const cancelDeleteConnection = document.getElementById('cancelDeleteConnection');
 const confirmDeleteConnection = document.getElementById('confirmDeleteConnection');
+const editConnectionModal = document.getElementById('editConnectionModal');
+const closeEditConnectionModal = document.getElementById('closeEditConnectionModal');
+const cancelEditConnection = document.getElementById('cancelEditConnection');
+const saveOnlyEditConnection = document.getElementById('saveOnlyEditConnection');
+const saveAndConnectEditConnection = document.getElementById('saveAndConnectEditConnection');
+const editConnectionForm = document.getElementById('editConnectionForm');
+const editConnectionName = document.getElementById('editConnectionName');
+const editDbType = document.getElementById('editDbType');
+const editConnectionMode = document.getElementById('editConnectionMode');
+const editDsnGroup = document.getElementById('editDsnGroup');
+const editFormGroup = document.getElementById('editFormGroup');
+const editDsn = document.getElementById('editDsn');
+const editHost = document.getElementById('editHost');
+const editPort = document.getElementById('editPort');
+const editUser = document.getElementById('editUser');
+const editPassword = document.getElementById('editPassword');
+const editSqliteFileGroup = document.getElementById('editSqliteFileGroup');
+const editNormalFormGroup = document.getElementById('editNormalFormGroup');
+const editSqliteFile = document.getElementById('editSqliteFile');
+const editUseProxy = document.getElementById('editUseProxy');
+const editProxyGroup = document.getElementById('editProxyGroup');
+const editProxyType = document.getElementById('editProxyType');
+const editProxyHost = document.getElementById('editProxyHost');
+const editProxyPort = document.getElementById('editProxyPort');
+const editProxyUser = document.getElementById('editProxyUser');
+const editProxyPassword = document.getElementById('editProxyPassword');
+const editProxyKeyFile = document.getElementById('editProxyKeyFile');
+const editProxyKeyFileName = document.getElementById('editProxyKeyFileName');
+const editProxyKeyData = document.getElementById('editProxyKeyData');
+const toggleEditPassword = document.getElementById('toggleEditPassword');
+const toggleEditProxyPassword = document.getElementById('toggleEditProxyPassword');
 const clearAllConnectionsModal = document.getElementById('clearAllConnectionsModal');
 const closeClearAllConnectionsModal = document.getElementById('closeClearAllConnectionsModal');
 const cancelClearAllConnections = document.getElementById('cancelClearAllConnections');
@@ -1146,6 +1192,8 @@ const confirmClearAllConnections = document.getElementById('confirmClearAllConne
 
 // 删除连接相关的状态
 let deleteConnectionIndex = null;
+// 编辑连接相关的状态
+let editConnectionIndex = null;
 
 // 活动连接列表（支持多个连接）
 let activeConnections = new Map(); // connectionId -> connectionInfo
@@ -1679,6 +1727,14 @@ function loadSavedConnections() {
         connectBtn.textContent = displayText;
         connectBtn.title = displayText; // 完整文本作为提示
         
+        // 创建编辑按钮
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-secondary';
+        editBtn.style.cssText = 'flex-shrink: 0; width: 2rem; padding: 0.5rem; font-size: 0.875rem; line-height: 1;';
+        editBtn.textContent = '✎';
+        editBtn.title = t('connection.edit') || '编辑连接';
+        editBtn.dataset.index = index;
+        
         // 创建删除按钮
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-secondary';
@@ -1692,6 +1748,12 @@ function loadSavedConnections() {
             connectWithSavedConnection(conn);
         });
         
+        // 点击编辑按钮
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditConnectionModal(conn, index);
+        });
+        
         // 点击删除按钮
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1700,6 +1762,7 @@ function loadSavedConnections() {
         });
         
         buttonWrapper.appendChild(connectBtn);
+        buttonWrapper.appendChild(editBtn);
         buttonWrapper.appendChild(deleteBtn);
         savedConnectionsList.appendChild(buttonWrapper);
     });
@@ -1942,6 +2005,473 @@ closeDeleteConnectionModal.addEventListener('click', () => {
     deleteConnectionIndex = null;
 });
 
+// 打开编辑连接模态框
+function openEditConnectionModal(conn, index) {
+    editConnectionIndex = index;
+    
+    // 填充连接名
+    if (editConnectionName) {
+        editConnectionName.value = conn.name || '';
+    }
+    
+    // 填充数据库类型
+    if (editDbType) {
+        editDbType.value = conn.type || 'mysql';
+        // 更新表单显示（根据数据库类型）
+        updateEditFormForDbType(conn.type || 'mysql');
+    }
+    
+    // 填充连接方式
+    if (editConnectionMode) {
+        if (conn.dsn) {
+            editConnectionMode.value = 'dsn';
+            if (editDsnGroup) editDsnGroup.style.display = 'block';
+            if (editFormGroup) editFormGroup.style.display = 'none';
+        } else {
+            editConnectionMode.value = 'form';
+            if (editDsnGroup) editDsnGroup.style.display = 'none';
+            if (editFormGroup) editFormGroup.style.display = 'block';
+        }
+    }
+    
+    // 填充DSN
+    if (editDsn && conn.dsn) {
+        editDsn.value = conn.dsn;
+    }
+    
+    // 填充表单字段
+    if (editHost) editHost.value = conn.host || '';
+    if (editPort) editPort.value = conn.port || '3306';
+    if (editUser) editUser.value = conn.user || '';
+    
+    // 解密并填充密码
+    if (editPassword) {
+        let password = '';
+        if (conn.passwordEncrypted) {
+            password = decryptPassword(conn.password);
+        } else {
+            password = conn.password || '';
+        }
+        editPassword.value = password;
+    }
+    
+    // SQLite3 特殊处理
+    if (conn.type === 'sqlite' && editSqliteFile) {
+        editSqliteFile.value = conn.database || conn.host || '';
+    }
+    
+    // 填充代理配置
+    if (conn.proxy) {
+        if (editUseProxy) {
+            editUseProxy.checked = true;
+            if (editProxyGroup) editProxyGroup.style.display = 'block';
+        }
+        if (editProxyType) editProxyType.value = conn.proxy.type || 'ssh';
+        if (editProxyHost) editProxyHost.value = conn.proxy.host || '';
+        if (editProxyPort) editProxyPort.value = conn.proxy.port || '22';
+        if (editProxyUser) editProxyUser.value = conn.proxy.user || '';
+        
+        // 解密并填充代理密码
+        if (editProxyPassword) {
+            let proxyPassword = '';
+            if (conn.proxy.passwordEncrypted) {
+                proxyPassword = decryptPassword(conn.proxy.password);
+            } else {
+                proxyPassword = conn.proxy.password || '';
+            }
+            editProxyPassword.value = proxyPassword;
+        }
+        
+        // 处理私钥（从config中提取）
+        if (conn.proxy.config) {
+            try {
+                const config = JSON.parse(conn.proxy.config);
+                if (config.key_data && editProxyKeyData) {
+                    // 私钥内容已经加密，直接使用
+                    editProxyKeyData.value = config.key_data;
+                    // 显示提示：私钥已从保存的连接中加载
+                    if (editProxyKeyFileName) {
+                        editProxyKeyFileName.textContent = t('proxy.keyFileSelected') + ': ' + (t('connection.saved') || '已保存的连接');
+                    }
+                }
+            } catch (e) {
+                console.warn('解析代理配置失败:', e);
+            }
+        }
+    } else {
+        if (editUseProxy) {
+            editUseProxy.checked = false;
+            if (editProxyGroup) editProxyGroup.style.display = 'none';
+        }
+    }
+    
+    // 显示模态框
+    if (editConnectionModal) {
+        editConnectionModal.style.display = 'flex';
+    }
+}
+
+// 更新编辑表单显示（根据数据库类型）
+function updateEditFormForDbType(dbType) {
+    if (dbType === 'sqlite') {
+        // SQLite3: 只显示文件路径输入框，隐藏其他字段和DSN选项
+        if (editSqliteFileGroup) editSqliteFileGroup.style.display = 'block';
+        if (editNormalFormGroup) editNormalFormGroup.style.display = 'none';
+        if (editDsnGroup) editDsnGroup.style.display = 'none';
+        if (editConnectionMode) editConnectionMode.style.display = 'none';
+        if (editFormGroup) editFormGroup.style.display = 'block';
+        // 隐藏代理配置（SQLite3 不需要代理）
+        if (editUseProxy && editUseProxy.parentElement) {
+            editUseProxy.parentElement.style.display = 'none';
+        }
+    } else {
+        // 其他数据库: 显示正常表单
+        if (editSqliteFileGroup) editSqliteFileGroup.style.display = 'none';
+        if (editNormalFormGroup) editNormalFormGroup.style.display = 'block';
+        if (editConnectionMode) editConnectionMode.style.display = 'block';
+        // 显示代理配置
+        if (editUseProxy && editUseProxy.parentElement) {
+            editUseProxy.parentElement.style.display = 'block';
+        }
+    }
+}
+
+// 编辑连接模式切换
+if (editConnectionMode) {
+    editConnectionMode.addEventListener('change', (e) => {
+        const dbType = editDbType ? editDbType.value : '';
+        // SQLite3 不支持 DSN 模式
+        if (dbType === 'sqlite') {
+            return;
+        }
+        if (e.target.value === 'dsn') {
+            if (editDsnGroup) editDsnGroup.style.display = 'block';
+            if (editFormGroup) editFormGroup.style.display = 'none';
+        } else {
+            if (editDsnGroup) editDsnGroup.style.display = 'none';
+            if (editFormGroup) editFormGroup.style.display = 'block';
+        }
+    });
+}
+
+// 编辑连接数据库类型切换
+if (editDbType) {
+    editDbType.addEventListener('change', (e) => {
+        const dbType = e.target.value;
+        updateEditFormForDbType(dbType);
+    });
+}
+
+// 编辑连接代理配置显示/隐藏
+if (editUseProxy) {
+    editUseProxy.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            if (editProxyGroup) editProxyGroup.style.display = 'block';
+        } else {
+            if (editProxyGroup) editProxyGroup.style.display = 'none';
+        }
+    });
+}
+
+// 编辑连接密码显示/隐藏切换
+if (toggleEditPassword) {
+    toggleEditPassword.addEventListener('click', () => {
+        if (editPassword && editPassword.type === 'password') {
+            editPassword.type = 'text';
+            toggleEditPassword.textContent = '🙈';
+        } else if (editPassword) {
+            editPassword.type = 'password';
+            toggleEditPassword.textContent = '👁️';
+        }
+    });
+}
+
+// 编辑连接代理密码显示/隐藏切换
+if (toggleEditProxyPassword) {
+    toggleEditProxyPassword.addEventListener('click', () => {
+        if (editProxyPassword && editProxyPassword.type === 'password') {
+            editProxyPassword.type = 'text';
+            toggleEditProxyPassword.textContent = '🙈';
+        } else if (editProxyPassword) {
+            editProxyPassword.type = 'password';
+            toggleEditProxyPassword.textContent = '👁️';
+        }
+    });
+}
+
+// 编辑连接SSH私钥文件上传处理
+if (editProxyKeyFile) {
+    editProxyKeyFile.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+            if (editProxyKeyFileName) {
+                editProxyKeyFileName.textContent = '';
+            }
+            if (editProxyKeyData) {
+                editProxyKeyData.value = '';
+            }
+            return;
+        }
+        
+        // 显示文件名
+        if (editProxyKeyFileName) {
+            editProxyKeyFileName.textContent = `${t('proxy.keyFileSelected')}: ${file.name}`;
+        }
+        
+        try {
+            // 读取文件内容
+            const fileContent = await readFileAsText(file);
+            
+            // 加密私钥内容（使用与密码相同的加密方式）
+            const encryptedKey = encryptPassword(fileContent);
+            
+            // 存储到隐藏的 textarea（用于后续提交）
+            if (editProxyKeyData) {
+                editProxyKeyData.value = encryptedKey;
+            }
+        } catch (error) {
+            console.error('读取私钥文件失败:', error);
+            showNotification('读取私钥文件失败: ' + error.message, 'error');
+            if (editProxyKeyFileName) {
+                editProxyKeyFileName.textContent = '';
+            }
+            if (editProxyKeyData) {
+                editProxyKeyData.value = '';
+            }
+            if (editProxyKeyFile) {
+                editProxyKeyFile.value = '';
+            }
+        }
+    });
+}
+
+// 关闭编辑连接模态框
+if (closeEditConnectionModal) {
+    closeEditConnectionModal.addEventListener('click', () => {
+        if (editConnectionModal) {
+            editConnectionModal.style.display = 'none';
+        }
+        editConnectionIndex = null;
+    });
+}
+
+if (cancelEditConnection) {
+    cancelEditConnection.addEventListener('click', () => {
+        if (editConnectionModal) {
+            editConnectionModal.style.display = 'none';
+        }
+        editConnectionIndex = null;
+    });
+}
+
+// 保存编辑的连接（仅保存，不连接）
+if (saveOnlyEditConnection) {
+    saveOnlyEditConnection.addEventListener('click', async () => {
+        await handleSaveEditConnection(false);
+    });
+}
+
+// 保存并连接编辑的连接
+if (saveAndConnectEditConnection) {
+    saveAndConnectEditConnection.addEventListener('click', async () => {
+        await handleSaveEditConnection(true);
+    });
+}
+
+// 处理保存编辑的连接
+async function handleSaveEditConnection(connectAfterSave) {
+    if (editConnectionIndex === null) {
+        return;
+    }
+    
+    const saved = getSavedConnections();
+    if (editConnectionIndex < 0 || editConnectionIndex >= saved.length) {
+        showNotification('连接索引无效', 'error');
+        return;
+    }
+    
+    const dbType = editDbType ? editDbType.value : '';
+    if (!dbType) {
+        showNotification(t('error.selectDbType'), 'error');
+        return;
+    }
+    
+    // 获取连接名
+    const connectionName = editConnectionName ? editConnectionName.value.trim() : '';
+    
+    // 构建连接信息
+    let connectionInfo = {
+        type: dbType,
+        name: connectionName
+    };
+    
+    const mode = editConnectionMode ? editConnectionMode.value : 'form';
+    
+    // 构建连接信息
+    if (dbType === 'sqlite') {
+        // SQLite3 特殊处理：只需要文件路径
+        const filePath = editSqliteFile ? editSqliteFile.value.trim() : '';
+        if (!filePath) {
+            showNotification(t('error.sqliteFileRequired'), 'error');
+            return;
+        }
+        connectionInfo.database = filePath;
+    } else if (mode === 'dsn') {
+        const dsnValue = editDsn ? editDsn.value : '';
+        if (!dsnValue) {
+            showNotification(t('error.enterDSN'), 'error');
+            return;
+        }
+        connectionInfo.dsn = dsnValue;
+    } else {
+        const hostValue = editHost ? editHost.value : '';
+        const userValue = editUser ? editUser.value : '';
+        if (!hostValue || !userValue) {
+            showNotification(t('error.fillHostUser'), 'error');
+            return;
+        }
+        connectionInfo.host = hostValue;
+        connectionInfo.port = editPort ? (editPort.value || '3306') : '3306';
+        connectionInfo.user = userValue;
+        // 数据库密码（先不加密，后面统一处理）
+        const dbPassword = editPassword ? editPassword.value : '';
+        connectionInfo.password = dbPassword || '';
+        connectionInfo.database = '';
+    }
+    
+    // 构建代理配置（如果启用）- SQLite3 不支持代理
+    if (dbType !== 'sqlite' && editUseProxy && editUseProxy.checked) {
+        const proxyConfig = {
+            type: editProxyType ? editProxyType.value : 'ssh',
+            host: editProxyHost ? editProxyHost.value : '',
+            port: editProxyPort ? (editProxyPort.value || '22') : '22',
+            user: editProxyUser ? editProxyUser.value : '',
+            password: '', // 先设为空，如果有密码再加密
+            key_file: '',
+            config: ''
+        };
+        
+        // 加密代理密码（如果提供了）
+        const proxyPasswordValue = editProxyPassword ? editProxyPassword.value : '';
+        if (proxyPasswordValue && proxyPasswordValue.trim() !== '') {
+            proxyConfig.password = encryptPassword(proxyPasswordValue);
+        }
+        
+        // 如果提供了SSH私钥（从文件上传或保存的连接中获取）
+        if (editProxyKeyData && editProxyKeyData.value && editProxyKeyData.value.trim() !== '') {
+            proxyConfig.config = JSON.stringify({
+                key_data: editProxyKeyData.value // 已经是加密后的内容
+            });
+        }
+        
+        // 验证必填字段：主机和用户名
+        if (!proxyConfig.host || !proxyConfig.user) {
+            showNotification(t('proxy.required'), 'error');
+            return;
+        }
+        
+        // 验证认证方式：至少需要密码或私钥之一
+        const hasPassword = proxyConfig.password && proxyConfig.password.trim() !== '';
+        const hasKey = editProxyKeyData && editProxyKeyData.value && editProxyKeyData.value.trim() !== '';
+        if (!hasPassword && !hasKey) {
+            showNotification(t('proxy.authRequired'), 'error');
+            return;
+        }
+        
+        connectionInfo.proxy = proxyConfig;
+    }
+    
+    // 更新保存的连接
+    const originalConn = saved[editConnectionIndex];
+    const connectionToSave = {
+        ...connectionInfo,
+        savedAt: originalConn.savedAt || new Date().toISOString(), // 保留原始保存时间
+        preset: originalConn.preset || false // 保留预设标记
+    };
+    
+    // 如果使用表单模式，处理密码
+    if (!connectionToSave.dsn) {
+        // 如果用户输入了新密码，加密它
+        if (editPassword && editPassword.value && editPassword.value.trim() !== '') {
+            connectionToSave.password = encryptPassword(connectionToSave.password);
+            connectionToSave.passwordEncrypted = true;
+        } else {
+            // 用户没有输入新密码，保留旧的密码
+            if (originalConn.password) {
+                connectionToSave.password = originalConn.password;
+                connectionToSave.passwordEncrypted = originalConn.passwordEncrypted;
+            } else {
+                connectionToSave.password = '';
+            }
+        }
+    }
+    
+    // 如果使用代理，处理代理密码和私钥
+    if (connectionToSave.proxy) {
+        const proxyConfig = { ...connectionToSave.proxy };
+        
+        // 如果用户输入了新的代理密码，加密它
+        if (editProxyPassword && editProxyPassword.value && editProxyPassword.value.trim() !== '') {
+            proxyConfig.password = encryptPassword(proxyConfig.password);
+            proxyConfig.passwordEncrypted = true;
+        } else if (originalConn.proxy && originalConn.proxy.password) {
+            // 用户没有输入新密码，保留旧的代理密码
+            proxyConfig.password = originalConn.proxy.password;
+            proxyConfig.passwordEncrypted = originalConn.proxy.passwordEncrypted;
+        }
+        
+        // 处理私钥（如果存在，已经是加密后的，直接保存）
+        if (proxyConfig.config) {
+            try {
+                const config = JSON.parse(proxyConfig.config);
+                if (config.key_data) {
+                    proxyConfig.config = JSON.stringify({
+                        key_data: config.key_data
+                    });
+                }
+            } catch (e) {
+                console.warn('解析代理配置失败:', e);
+            }
+        }
+        
+        connectionToSave.proxy = proxyConfig;
+    }
+    
+    // SQLite3 特殊处理：保存文件路径到 database 字段
+    if (dbType === 'sqlite' && editSqliteFile) {
+        connectionToSave.database = editSqliteFile.value.trim();
+    }
+    
+    // 如果新连接没有私钥，保留旧的私钥（如果用户没有上传新文件）
+    if (connectionToSave.proxy && originalConn.proxy) {
+        // 如果新连接没有私钥，保留旧的私钥
+        if (!connectionToSave.proxy.config && originalConn.proxy.config) {
+            connectionToSave.proxy.config = originalConn.proxy.config;
+        }
+    } else if (originalConn.proxy && !connectionToSave.proxy) {
+        // 如果旧连接有代理配置但新连接没有，保留旧的代理配置
+        connectionToSave.proxy = originalConn.proxy;
+    }
+    
+    // 更新连接
+    saved[editConnectionIndex] = connectionToSave;
+    localStorage.setItem('savedConnections', JSON.stringify(saved));
+    loadSavedConnections();
+    
+    // 关闭模态框
+    if (editConnectionModal) {
+        editConnectionModal.style.display = 'none';
+    }
+    editConnectionIndex = null;
+    
+    showNotification(t('connection.saved'), 'success');
+    
+    // 如果选择保存并连接，执行连接
+    if (connectAfterSave) {
+        await connectWithSavedConnection(connectionToSave);
+    }
+}
+
 // 清空所有保存的连接
 clearSavedConnections.addEventListener('click', () => {
     clearAllConnectionsModal.style.display = 'flex';
@@ -2016,18 +2546,35 @@ async function loadDatabaseTypes() {
 // 更新数据库类型选择框
 function updateDatabaseTypeSelect() {
     const dbTypeSelect = document.getElementById('dbType');
-    if (!dbTypeSelect) return;
+    const editDbTypeSelect = document.getElementById('editDbType');
     
-    // 清空现有选项
-    dbTypeSelect.innerHTML = '';
+    // 更新新增连接的数据库类型选择框
+    if (dbTypeSelect) {
+        // 清空现有选项
+        dbTypeSelect.innerHTML = '';
+        
+        // 添加数据库类型选项
+        databaseTypes.forEach(dbType => {
+            const option = document.createElement('option');
+            option.value = dbType.type;
+            option.textContent = dbType.display_name;
+            dbTypeSelect.appendChild(option);
+        });
+    }
     
-    // 添加数据库类型选项
-    databaseTypes.forEach(dbType => {
-        const option = document.createElement('option');
-        option.value = dbType.type;
-        option.textContent = dbType.display_name;
-        dbTypeSelect.appendChild(option);
-    });
+    // 更新编辑连接的数据库类型选择框
+    if (editDbTypeSelect) {
+        // 清空现有选项
+        editDbTypeSelect.innerHTML = '';
+        
+        // 添加数据库类型选项
+        databaseTypes.forEach(dbType => {
+            const option = document.createElement('option');
+            option.value = dbType.type;
+            option.textContent = dbType.display_name;
+            editDbTypeSelect.appendChild(option);
+        });
+    }
 }
 
 // 页面加载时加载保存的连接
@@ -2240,6 +2787,10 @@ function initCodeMirror() {
     if (container) {
         // 确保CodeMirror在容器内正确显示
         sqlEditor.setSize('100%', '300px');
+        // 刷新编辑器布局，确保行号和内容正确对齐
+        setTimeout(() => {
+            sqlEditor.refresh();
+        }, 100);
     }
     
     // 更新自动补全表信息的函数

@@ -244,8 +244,6 @@ func NewServer() (*Server, error) {
 		"oracle":     "Oracle",
 		"sqlserver":  "SQL Server",
 		"mssql":      "SQL Server",
-		"db2":        "DB2",
-		"h2":         "H2",
 		"mongodb":    "MongoDB",
 	}
 
@@ -561,10 +559,6 @@ func (s *Server) createDatabaseFromSessionData(data *SessionData) (database.Data
 			db = database.NewOracle()
 		case "sqlserver", "mssql":
 			db = database.NewSQLServer()
-		case "db2":
-			db = database.NewDB2()
-		case "h2":
-			db = database.NewH2()
 		case "mongodb":
 			db = database.NewMongoDB()
 		default:
@@ -899,10 +893,6 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 			db = database.NewOracle()
 		case "sqlserver", "mssql":
 			db = database.NewSQLServer()
-		case "db2":
-			db = database.NewDB2()
-		case "h2":
-			db = database.NewH2()
 		case "mongodb":
 			db = database.NewMongoDB()
 		default:
@@ -953,10 +943,6 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		dsn = database.BuildOracleDSN(info)
 	case "sqlserver", "mssql":
 		dsn = database.BuildSQLServerDSN(info)
-	case "db2":
-		dsn = database.BuildDB2DSN(info)
-	case "h2":
-		dsn = database.BuildH2DSN(info)
 	case "mongodb":
 		dsn = database.BuildMongoDBDSN(info)
 	default:

@@ -13,6 +13,9 @@ import (
 //go:embed static/user-management.js
 var userManagementScript string
 
+//go:embed templates/login.html
+var loginHTML string
+
 func main() {
 	// 初始化数据库
 	dbPath := "client.db"
@@ -51,8 +54,7 @@ func main() {
 	engine.Use(gin.Logger())
 	engine.Use(gin.Recovery())
 
-	// 加载登录页面模板
-	engine.LoadHTMLGlob("templates/*.html")
+	// 登录页面模板已通过 embed 嵌入，不需要从文件系统加载
 
 	// 注册认证中间件
 	engine.Use(AuthMiddleware())

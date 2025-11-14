@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,9 +12,24 @@ import (
 
 // LoginPage 登录页面
 func LoginPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "login.html", gin.H{
+	// 解析嵌入的模板
+	tmpl, err := template.New("login").Parse(loginHTML)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to parse login template: %v", err)
+		return
+	}
+
+	// 渲染模板
+	var buf bytes.Buffer
+	data := gin.H{
 		"title": "Login - SimpleDBWeb",
-	})
+	}
+	if err := tmpl.Execute(&buf, data); err != nil {
+		c.String(http.StatusInternalServerError, "Failed to execute login template: %v", err)
+		return
+	}
+
+	c.Data(http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
 }
 
 // LoginAPI 登录API

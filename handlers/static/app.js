@@ -185,7 +185,17 @@ const i18n = {
             'lang.en': 'English',
             'lang.zh-CN': '简体中文',
             'lang.zh-TW': '繁體中文',
-            'lang.switch': 'Language'
+            'lang.switch': 'Language',
+            
+            // 主题切换
+            'theme.switch': 'Theme',
+            'theme.yellow': 'Yellow',
+            'theme.blue': 'Blue',
+            'theme.green': 'Green',
+            'theme.purple': 'Purple',
+            'theme.orange': 'Orange',
+            'theme.cyan': 'Cyan',
+            'theme.red': 'Red'
         },
         'zh-CN': {
             // 通用
@@ -376,7 +386,17 @@ const i18n = {
             'lang.en': 'English',
             'lang.zh-CN': '简体中文',
             'lang.zh-TW': '繁體中文',
-            'lang.switch': '语言'
+            'lang.switch': '语言',
+            
+            // 主题切换
+            'theme.switch': '主题',
+            'theme.yellow': '黄色',
+            'theme.blue': '蓝色',
+            'theme.green': '绿色',
+            'theme.purple': '紫色',
+            'theme.orange': '橙色',
+            'theme.cyan': '青色',
+            'theme.red': '红色'
         },
         'zh-TW': {
             // 通用
@@ -567,7 +587,17 @@ const i18n = {
             'lang.en': 'English',
             'lang.zh-CN': '简体中文',
             'lang.zh-TW': '繁體中文',
-            'lang.switch': '語言'
+            'lang.switch': '語言',
+            
+            // 主题切换
+            'theme.switch': '主題',
+            'theme.yellow': '黃色',
+            'theme.blue': '藍色',
+            'theme.green': '綠色',
+            'theme.purple': '紫色',
+            'theme.orange': '橙色',
+            'theme.cyan': '青色',
+            'theme.red': '紅色'
         }
     },
     
@@ -987,6 +1017,107 @@ let activeConnections = new Map(); // connectionId -> connectionInfo
 // 语言切换相关
 const languageSelect = document.getElementById('languageSelect');
 
+// 主题切换相关
+const themeSelect = document.getElementById('themeSelect');
+
+// 主题管理
+const themeManager = {
+    currentTheme: 'yellow', // 默认黄色主题
+    
+    // 主题配置
+    themes: {
+        yellow: { name: '黄色', icon: '🟡' },
+        blue: { name: '蓝色', icon: '🔵' },
+        green: { name: '绿色', icon: '🟢' },
+        purple: { name: '紫色', icon: '🟣' },
+        orange: { name: '橙色', icon: '🟠' },
+        cyan: { name: '青色', icon: '🔷' },
+        red: { name: '红色', icon: '🔴' }
+    },
+    
+    // 设置主题
+    setTheme(theme) {
+        if (this.themes[theme]) {
+            this.currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('simple-db-web-theme', theme);
+            this.updateThemeSelect();
+        }
+    },
+    
+    // 初始化主题
+    init() {
+        const savedTheme = localStorage.getItem('simple-db-web-theme');
+        if (savedTheme && this.themes[savedTheme]) {
+            this.setTheme(savedTheme);
+        } else {
+            // 默认使用黄色主题（不设置 data-theme，使用 :root 的默认值）
+            this.setTheme('yellow');
+        }
+    },
+    
+    // 更新主题选择器显示
+    updateThemeSelect() {
+        if (themeSelect) {
+            themeSelect.value = this.currentTheme;
+            // 更新选项文本（国际化）
+            this.updateThemeSelectOptions();
+        }
+    },
+    
+    // 更新主题选择器选项文本（国际化）
+    updateThemeSelectOptions() {
+        if (!themeSelect) return;
+        const themes = {
+            yellow: t('theme.yellow'),
+            blue: t('theme.blue'),
+            green: t('theme.green'),
+            purple: t('theme.purple'),
+            orange: t('theme.orange'),
+            cyan: t('theme.cyan'),
+            red: t('theme.red')
+        };
+        const icons = {
+            yellow: '🟡',
+            blue: '🔵',
+            green: '🟢',
+            purple: '🟣',
+            orange: '🟠',
+            cyan: '🔷',
+            red: '🔴'
+        };
+        // 保存当前选中的值
+        const currentValue = themeSelect.value;
+        themeSelect.querySelectorAll('option').forEach(option => {
+            const theme = option.value;
+            if (themes[theme] && icons[theme]) {
+                // 如果翻译成功（不是返回key本身），使用翻译后的文本
+                const translated = themes[theme];
+                if (translated && translated !== `theme.${theme}`) {
+                    option.textContent = `${icons[theme]} ${translated}`;
+                } else {
+                    // 如果翻译失败，使用默认文本
+                    const defaultNames = {
+                        yellow: 'Yellow',
+                        blue: 'Blue',
+                        green: 'Green',
+                        purple: 'Purple',
+                        orange: 'Orange',
+                        cyan: 'Cyan',
+                        red: 'Red'
+                    };
+                    option.textContent = `${icons[theme]} ${defaultNames[theme] || theme}`;
+                }
+            }
+        });
+        // 恢复选中的值
+        themeSelect.value = currentValue;
+    }
+};
+
+// 导出主题管理器到全局
+window.themeManager = themeManager;
+
 // 更新所有带有 data-i18n 属性的元素
 function updateI18nElements() {
     // 更新 textContent（包括 option 元素）
@@ -1032,11 +1163,22 @@ if (languageSelect) {
     });
 }
 
+// 主题切换事件
+if (themeSelect) {
+    themeSelect.addEventListener('change', (e) => {
+        themeManager.setTheme(e.target.value);
+    });
+}
+
     // 监听语言变化事件
 window.addEventListener('languageChanged', () => {
     updateI18nElements();
     if (languageSelect) {
         languageSelect.value = i18n.currentLang;
+    }
+    // 更新主题选择器选项文本
+    if (themeManager) {
+        themeManager.updateThemeSelectOptions();
     }
     // 更新导出按钮的翻译
     if (exportDataBtn && exportDataBtn.style.display !== 'none') {
@@ -1355,14 +1497,14 @@ function loadSavedConnections() {
                 const filePath = conn.database || conn.host || 'unknown';
                 displayText = `sqlite://${filePath}`;
             } else if (conn.dsn) {
-                // DSN 模式
-                const userMatch = conn.dsn.match(/^([^:]+):/);
-                const hostMatch = conn.dsn.match(/@tcp\(([^:]+)/);
-                const user = userMatch ? userMatch[1] : 'unknown';
-                const host = hostMatch ? hostMatch[1] : 'unknown';
-                displayText = `${conn.type || 'mysql'}://${user}@${host}`;
-            } else {
-                displayText = `${conn.type || 'mysql'}://${conn.user || 'unknown'}@${conn.host || 'unknown'}:${conn.port || '3306'}`;
+            // DSN 模式
+            const userMatch = conn.dsn.match(/^([^:]+):/);
+            const hostMatch = conn.dsn.match(/@tcp\(([^:]+)/);
+            const user = userMatch ? userMatch[1] : 'unknown';
+            const host = hostMatch ? hostMatch[1] : 'unknown';
+            displayText = `${conn.type || 'mysql'}://${user}@${host}`;
+        } else {
+            displayText = `${conn.type || 'mysql'}://${conn.user || 'unknown'}@${conn.host || 'unknown'}:${conn.port || '3306'}`;
             }
         }
         
@@ -2035,6 +2177,9 @@ const queryHistory = {
 
 // 页面加载完成后初始化 i18n 和恢复连接
 document.addEventListener('DOMContentLoaded', () => {
+    // 初始化主题（必须在其他初始化之前，因为会影响样式）
+    themeManager.init();
+    
     // 初始化 i18n（从 localStorage 读取或使用默认值）
     i18n.init();
     
@@ -2045,6 +2190,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const langSelect = document.getElementById('languageSelect');
     if (langSelect) {
         langSelect.value = i18n.currentLang;
+    }
+    
+    // 更新主题选择器选项文本（国际化）
+    if (themeManager) {
+        themeManager.updateThemeSelectOptions();
     }
     
     // 初始化CodeMirror编辑器

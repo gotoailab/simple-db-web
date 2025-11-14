@@ -119,8 +119,19 @@
                     <div class="connection-info" id="connectionInfo" style="display: none; margin-left: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
                         <span id="connectionInfoText"></span>
                     </div>
-                    <!-- 语言切换 -->
+                    <!-- 语言切换和主题切换 -->
                     <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+                        <select id="themeSelect"
+                            style="padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface); color: var(--text-primary); cursor: pointer;"
+                            data-i18n-title="theme.switch" title="选择主题">
+                            <option value="yellow">🟡 黄色</option>
+                            <option value="blue">🔵 蓝色</option>
+                            <option value="green">🟢 绿色</option>
+                            <option value="purple">🟣 紫色</option>
+                            <option value="orange">🟠 橙色</option>
+                            <option value="cyan">🔷 青色</option>
+                            <option value="red">🔴 红色</option>
+                        </select>
                         <select id="languageSelect"
                             style="padding: 0.25rem 0.5rem; font-size: 0.875rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface); color: var(--text-primary);">
                             <option value="en">English</option>

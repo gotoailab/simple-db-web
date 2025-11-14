@@ -6,7 +6,7 @@
 }
 
 :root {
-    /* 黄色主题色（类似Beekeeper Studio） */
+    /* 默认黄色主题色（类似Beekeeper Studio） */
     --primary-color: #FFC107;
     --primary-dark: #FFA000;
     --primary-light: #FFECB3;
@@ -19,6 +19,108 @@
     --border-color: #404040;
     --success-color: #4CAF50;
     --danger-color: #F44336;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 蓝色主题 */
+[data-theme="blue"] {
+    --primary-color: #2196F3;
+    --primary-dark: #1976D2;
+    --primary-light: #BBDEFB;
+    --secondary-color: #64B5F6;
+    --background: #1E1E1E;
+    --surface: #2D2D2D;
+    --surface-light: #3D3D3D;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --border-color: #404040;
+    --success-color: #4CAF50;
+    --danger-color: #F44336;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 绿色主题 */
+[data-theme="green"] {
+    --primary-color: #4CAF50;
+    --primary-dark: #388E3C;
+    --primary-light: #C8E6C9;
+    --secondary-color: #81C784;
+    --background: #1E1E1E;
+    --surface: #2D2D2D;
+    --surface-light: #3D3D3D;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --border-color: #404040;
+    --success-color: #66BB6A;
+    --danger-color: #F44336;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 紫色主题 */
+[data-theme="purple"] {
+    --primary-color: #9C27B0;
+    --primary-dark: #7B1FA2;
+    --primary-light: #E1BEE7;
+    --secondary-color: #BA68C8;
+    --background: #1E1E1E;
+    --surface: #2D2D2D;
+    --surface-light: #3D3D3D;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --border-color: #404040;
+    --success-color: #4CAF50;
+    --danger-color: #F44336;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 橙色主题 */
+[data-theme="orange"] {
+    --primary-color: #FF9800;
+    --primary-dark: #F57C00;
+    --primary-light: #FFE0B2;
+    --secondary-color: #FFB74D;
+    --background: #1E1E1E;
+    --surface: #2D2D2D;
+    --surface-light: #3D3D3D;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --border-color: #404040;
+    --success-color: #4CAF50;
+    --danger-color: #F44336;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 青色主题 */
+[data-theme="cyan"] {
+    --primary-color: #00BCD4;
+    --primary-dark: #0097A7;
+    --primary-light: #B2EBF2;
+    --secondary-color: #4DD0E1;
+    --background: #1E1E1E;
+    --surface: #2D2D2D;
+    --surface-light: #3D3D3D;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --border-color: #404040;
+    --success-color: #4CAF50;
+    --danger-color: #F44336;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 红色主题 */
+[data-theme="red"] {
+    --primary-color: #F44336;
+    --primary-dark: #D32F2F;
+    --primary-light: #FFCDD2;
+    --secondary-color: #EF5350;
+    --background: #1E1E1E;
+    --surface: #2D2D2D;
+    --surface-light: #3D3D3D;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --border-color: #404040;
+    --success-color: #4CAF50;
+    --danger-color: #E53935;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -417,12 +519,12 @@ body {
 }
 
 .pagination button.active {
-    background: #9f8105;
+    background: var(--primary-dark);
     cursor: default;
 }
 
 .pagination button.active:hover {
-    background: #9f8105;
+    background: var(--primary-dark);
 }
 
 /* 代码块 */
@@ -762,7 +864,7 @@ body {
 }
 
 .pagination button.active {
-    background: #9f8105;
+    background: var(--primary-dark);
 }
 
 /* CodeMirror编辑器样式 */

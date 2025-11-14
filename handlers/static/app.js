@@ -1444,15 +1444,18 @@ async function connectWithSavedConnection(savedConn) {
         }
         
         // 将代理配置添加到连接信息中
-        connectionInfo.proxy = {
+        // 注意：密码和私钥需要加密后发送
+        const proxyConfigForConnect = {
             type: savedConn.proxy.type || 'ssh',
             host: savedConn.proxy.host || '',
             port: savedConn.proxy.port || '22',
             user: savedConn.proxy.user || '',
-            password: proxyPasswordValue,
+            password: proxyPasswordValue ? encryptPassword(proxyPasswordValue) : '', // 加密密码
             key_file: '',
-            config: savedConn.proxy.config || ''
+            config: savedConn.proxy.config || '' // 私钥已经是加密后的，直接使用
         };
+        
+        connectionInfo.proxy = proxyConfigForConnect;
     }
     
     // 直接执行连接逻辑，避免重复提交
@@ -2081,7 +2084,9 @@ async function handleConnect() {
         connectionInfo.host = hostInput.value;
         connectionInfo.port = document.getElementById('port') ? (document.getElementById('port').value || '3306') : '3306';
         connectionInfo.user = userInput.value;
-        connectionInfo.password = document.getElementById('password') ? document.getElementById('password').value : '';
+        // 加密数据库密码（如果提供了）
+        const dbPassword = document.getElementById('password') ? document.getElementById('password').value : '';
+        connectionInfo.password = dbPassword ? encryptPassword(dbPassword) : '';
         connectionInfo.database = '';
     }
     
@@ -2092,10 +2097,16 @@ async function handleConnect() {
             host: proxyHost ? proxyHost.value : '',
             port: proxyPort ? (proxyPort.value || '22') : '22',
             user: proxyUser ? proxyUser.value : '',
-            password: proxyPassword ? proxyPassword.value : '',
+            password: '', // 先设为空，如果有密码再加密
             key_file: '',
             config: ''
         };
+        
+        // 加密代理密码（如果提供了）
+        const proxyPasswordValue = proxyPassword ? proxyPassword.value : '';
+        if (proxyPasswordValue && proxyPasswordValue.trim() !== '') {
+            proxyConfig.password = encryptPassword(proxyPasswordValue);
+        }
         
         // 如果提供了SSH私钥（从文件上传或保存的连接中获取）
         // proxyKeyData 存储的是加密后的私钥内容

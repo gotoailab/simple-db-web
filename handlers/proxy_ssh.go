@@ -27,11 +27,32 @@ type SSHProxy struct {
 }
 
 // NewSSHProxy 创建SSH代理
-// config: 代理配置的JSON字符串
+// config: 代理配置的JSON字符串（database.ProxyConfig 的 JSON）
 func NewSSHProxy(config string) (Proxy, error) {
-	var proxyConfig SSHProxyConfig
-	if err := json.Unmarshal([]byte(config), &proxyConfig); err != nil {
+	// 先解析为 database.ProxyConfig，因为前端发送的是这个结构
+	var dbProxyConfig database.ProxyConfig
+	if err := json.Unmarshal([]byte(config), &dbProxyConfig); err != nil {
 		return nil, fmt.Errorf("解析SSH代理配置失败: %w", err)
+	}
+
+	// 转换为 SSHProxyConfig
+	// 注意：密码和私钥已经在 Connect 函数中解密，这里直接使用
+	proxyConfig := SSHProxyConfig{
+		Host:     dbProxyConfig.Host,
+		Port:     dbProxyConfig.Port,
+		User:     dbProxyConfig.User,
+		Password: dbProxyConfig.Password, // 已经是解密后的密码
+		KeyFile:  dbProxyConfig.KeyFile,
+	}
+
+	// 从 Config 字段中提取 key_data（如果存在）
+	if dbProxyConfig.Config != "" {
+		var configMap map[string]interface{}
+		if err := json.Unmarshal([]byte(dbProxyConfig.Config), &configMap); err == nil {
+			if keyData, ok := configMap["key_data"].(string); ok && keyData != "" {
+				proxyConfig.KeyData = keyData // 已经是解密后的私钥
+			}
+		}
 	}
 
 	// 设置默认端口
@@ -47,24 +68,27 @@ func NewSSHProxy(config string) (Proxy, error) {
 	}
 
 	// 认证方式：优先使用密钥，其次使用密码
+	var authMethods []ssh.AuthMethod
+	
 	if proxyConfig.KeyData != "" {
-		// 使用提供的密钥数据
+		// 使用提供的密钥数据（已经是解密后的原始私钥内容）
 		signer, err := ssh.ParsePrivateKey([]byte(proxyConfig.KeyData))
 		if err != nil {
 			return nil, fmt.Errorf("解析SSH私钥失败: %w", err)
 		}
-		sshConfig.Auth = []ssh.AuthMethod{ssh.PublicKeys(signer)}
-	} else if proxyConfig.KeyFile != "" {
-		// 从文件读取密钥
-		// 注意：在生产环境中，应该从安全的位置读取密钥文件
-		// 这里简化处理，实际使用时应该由外部项目提供密钥内容
-		return nil, fmt.Errorf("从文件读取SSH密钥暂不支持，请使用key_data字段提供密钥内容")
-	} else if proxyConfig.Password != "" {
-		// 使用密码认证
-		sshConfig.Auth = []ssh.AuthMethod{ssh.Password(proxyConfig.Password)}
-	} else {
+		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	}
+	
+	if proxyConfig.Password != "" {
+		// 使用密码认证（已经是解密后的原始密码）
+		authMethods = append(authMethods, ssh.Password(proxyConfig.Password))
+	}
+	
+	if len(authMethods) == 0 {
 		return nil, fmt.Errorf("SSH代理需要提供密码或密钥")
 	}
+	
+	sshConfig.Auth = authMethods
 
 	// 连接到SSH服务器
 	address := net.JoinHostPort(proxyConfig.Host, proxyConfig.Port)
@@ -108,20 +132,25 @@ func buildSSHProxyConfig(proxyConfig *database.ProxyConfig) (string, error) {
 		Host:     proxyConfig.Host,
 		Port:     proxyConfig.Port,
 		User:     proxyConfig.User,
-		Password: proxyConfig.Password,
+		Password: proxyConfig.Password, // 已经是解密后的密码
 		KeyFile:  proxyConfig.KeyFile,
 	}
 
-	// 如果提供了Config字段，尝试解析并合并
-	if proxyConfig.Config != "" {
-		var extraConfig map[string]interface{}
-		if err := json.Unmarshal([]byte(proxyConfig.Config), &extraConfig); err == nil {
-			// 合并额外配置
-			if keyData, ok := extraConfig["key_data"].(string); ok {
-				sshConfig.KeyData = keyData
+		// 如果提供了Config字段，尝试解析并合并
+		if proxyConfig.Config != "" {
+			var extraConfig map[string]interface{}
+			if err := json.Unmarshal([]byte(proxyConfig.Config), &extraConfig); err == nil {
+				// 合并额外配置
+				if keyData, ok := extraConfig["key_data"].(string); ok && keyData != "" {
+					// keyData 是加密后的，需要解密（使用 handlers 包中的 decryptPassword 函数）
+					decryptedKeyData, err := decryptPassword(keyData)
+					if err != nil {
+						return "", fmt.Errorf("解密SSH私钥失败: %w", err)
+					}
+					sshConfig.KeyData = decryptedKeyData
+				}
 			}
 		}
-	}
 
 	configJSON, err := json.Marshal(sshConfig)
 	if err != nil {

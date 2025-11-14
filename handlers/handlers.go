@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chenhg5/simple-db-web/database"
 )
@@ -394,6 +396,26 @@ func (s *Server) GetDatabaseTypes(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"types":   types,
 	})
+}
+
+// decryptPassword 解密密码（Base64解码，与前端encryptPassword对应）
+func decryptPassword(encrypted string) (string, error) {
+	if encrypted == "" {
+		return "", nil
+	}
+
+	// Base64解码
+	decoded, err := base64.StdEncoding.DecodeString(encrypted)
+	if err != nil {
+		return "", fmt.Errorf("Base64解码失败: %w", err)
+	}
+
+	// 转换为UTF-8字符串
+	if !utf8.Valid(decoded) {
+		return "", fmt.Errorf("解码后的数据不是有效的UTF-8字符串")
+	}
+
+	return string(decoded), nil
 }
 
 // generateConnectionID 生成唯一的连接ID
@@ -781,6 +803,49 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
 		writeJSONError(w, http.StatusBadRequest, ErrCodeParseRequestFailed, err)
 		return
+	}
+
+	// 解密数据库密码（如果提供了）
+	if info.Password != "" {
+		decryptedPassword, err := decryptPassword(info.Password)
+		if err != nil {
+			s.getLogger().Error(r.Context(), "Failed to decrypt database password: %v", err)
+			writeJSONError(w, http.StatusBadRequest, ErrCodeParseRequestFailed, fmt.Errorf("密码解密失败"))
+			return
+		}
+		info.Password = decryptedPassword
+	}
+
+	// 解密代理密码和私钥（如果提供了代理配置）
+	if info.Proxy != nil {
+		// 解密代理密码
+		if info.Proxy.Password != "" {
+			decryptedProxyPassword, err := decryptPassword(info.Proxy.Password)
+			if err != nil {
+				s.getLogger().Error(r.Context(), "Failed to decrypt proxy password: %v", err)
+				writeJSONError(w, http.StatusBadRequest, ErrCodeParseRequestFailed, fmt.Errorf("代理密码解密失败"))
+				return
+			}
+			info.Proxy.Password = decryptedProxyPassword
+		}
+
+		// 解密私钥（如果存在）
+		if info.Proxy.Config != "" {
+			var config map[string]interface{}
+			if err := json.Unmarshal([]byte(info.Proxy.Config), &config); err == nil {
+				if keyData, ok := config["key_data"].(string); ok && keyData != "" {
+					decryptedKeyData, err := decryptPassword(keyData)
+					if err != nil {
+						s.getLogger().Error(r.Context(), "Failed to decrypt SSH private key: %v", err)
+						writeJSONError(w, http.StatusBadRequest, ErrCodeParseRequestFailed, fmt.Errorf("SSH私钥解密失败"))
+						return
+					}
+					config["key_data"] = decryptedKeyData
+					configJSON, _ := json.Marshal(config)
+					info.Proxy.Config = string(configJSON)
+				}
+			}
+		}
 	}
 
 	// 生成连接ID

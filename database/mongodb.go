@@ -106,7 +106,7 @@ func (m *MongoDB) GetTableSchema(tableName string) (string, error) {
 	err := collection.FindOne(m.ctx, bson.M{}).Decode(&sampleDoc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return fmt.Sprintf("集合 %s 为空，无法推断结构", tableName), nil
+			return fmt.Sprintf("collection %s is empty, cannot infer schema", tableName), nil
 		}
 		return "", fmt.Errorf("failed to query collection schema: %w", err)
 	}

@@ -23,7 +23,7 @@ func (m *MysqlBasedOceandbDialect) GetTableSchema(tableName string) (string, err
 	var createTables = make([]CreateTable, 0)
 	rows, err := m.db.Query(fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName))
 	if err != nil {
-		return "", fmt.Errorf("查询表结构失败: %w", err)
+		return "", fmt.Errorf("failed to query table schema: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {

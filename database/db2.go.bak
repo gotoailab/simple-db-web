@@ -5,9 +5,23 @@ import (
 	"fmt"
 	"strings"
 
-	// DB2 驱动需要系统级别的 DB2 客户端库和 CGO
-	// 如果编译失败，请安装 DB2 客户端库或使用其他 DB2 驱动
-	// _ "github.com/ibmdb/go_ibm_db"
+	// DB2 驱动使用 go_ibm_db (IBM 官方驱动)
+	// 注意：此驱动需要系统级别的 DB2 客户端库（ODBC/CLI Driver）和 CGO 支持
+	//
+	// 编译要求：
+	// 1. 安装 DB2 客户端库（DB2 Client 或 DB2 Server）
+	// 2. 设置 CGO_ENABLED=1（默认启用）
+	// 3. 配置 DB2 环境变量（如 DB2_HOME, LD_LIBRARY_PATH 等）
+	//
+	// 安装说明：
+	// - Linux: 安装 IBM DB2 Client 或 Server
+	// - Windows: 安装 IBM DB2 Client 或 Server
+	// - macOS: 安装 IBM DB2 Client
+	// 详细文档：https://github.com/ibmdb/go_ibm_db
+	//
+	// 如果编译失败（提示 undefined: SQLSMALLINT 等），说明系统缺少 DB2 客户端库
+	// 请先安装 DB2 客户端库后再编译
+	ibmdb "github.com/ibmdb/go_ibm_db"
 )
 
 // DB2 实现Database接口
@@ -17,18 +31,22 @@ type DB2 struct {
 
 // NewDB2 创建DB2实例
 func NewDB2() *DB2 {
+	var _ = ibmdb.Conn{}
 	return &DB2{}
 }
 
 // Connect 建立DB2连接
+// 使用 go_ibm_db 驱动连接 DB2 数据库
+// 
+// DSN 格式：HOSTNAME=host;DATABASE=db;PORT=port;UID=user;PWD=password
+// 更多连接参数请参考：https://www.ibm.com/docs/en/db2/11.5?topic=odbc-cliodbc-configuration-keywords
+//
+// 注意：此方法需要系统已安装 DB2 客户端库（ODBC/CLI Driver）
+// 如果连接失败，请检查：
+// 1. DB2 客户端库是否正确安装
+// 2. 环境变量是否正确配置（DB2_HOME, LD_LIBRARY_PATH 等）
+// 3. 网络连接是否正常
 func (d *DB2) Connect(dsn string) error {
-	// DB2 驱动需要系统级别的 DB2 客户端库
-	// 当前实现需要安装 DB2 客户端库和配置 CGO
-	// 如果编译失败，请安装 DB2 客户端库或使用其他 DB2 驱动
-	return fmt.Errorf("DB2 driver requires system-level DB2 client library, please install DB2 client library and recompile")
-	
-	// 取消注释以下代码以使用 go_ibm_db 驱动（需要安装 DB2 客户端库）
-	/*
 	db, err := sql.Open("go_ibm_db", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database connection: %w", err)
@@ -38,9 +56,12 @@ func (d *DB2) Connect(dsn string) error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	oldDB := d.db
 	d.db = db
+	if oldDB != nil {
+		oldDB.Close()
+	}
 	return nil
-	*/
 }
 
 // Close 关闭连接
@@ -293,7 +314,7 @@ func (d *DB2) GetTableDataByID(tableName string, primaryKey string, lastId inter
 	var total int64
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", strings.ToUpper(tableName))
 	if err := d.db.QueryRow(countQuery).Scan(&total); err != nil {
-		return nil, 0, nil, fmt.Errorf("查询总数失败: %w", err)
+		return nil, 0, nil, fmt.Errorf("failed to query total count: %w", err)
 	}
 
 	// 构建基于ID的查询
@@ -326,7 +347,7 @@ func (d *DB2) GetTableDataByID(tableName string, primaryKey string, lastId inter
 	}
 
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("查询数据失败: %w", err)
+		return nil, 0, nil, fmt.Errorf("failed to query data: %w", err)
 	}
 	defer rows.Close()
 
@@ -435,15 +456,31 @@ func (d *DB2) SwitchDatabase(databaseName string) error {
 }
 
 // BuildDB2DSN 根据连接信息构建DB2 DSN
+// 
+// DB2 连接字符串格式（ODBC/CLI 格式）：
+// HOSTNAME=host;DATABASE=db;PORT=port;UID=user;PWD=password;PROTOCOL=TCPIP;
+//
+// 支持的连接参数：
+// - HOSTNAME: 数据库服务器主机名或IP地址
+// - DATABASE: 数据库名称
+// - PORT: 数据库端口（默认 50000）
+// - UID: 用户名
+// - PWD: 密码
+// - PROTOCOL: 协议类型（TCPIP, IPC 等，默认 TCPIP）
+// - Security: SSL 安全连接（可选，如 Security=SSL）
+// - SSLServerCertificate: SSL 证书路径（可选）
+//
+// 更多参数请参考：https://www.ibm.com/docs/en/db2/11.5?topic=odbc-cliodbc-configuration-keywords
 func BuildDB2DSN(info ConnectionInfo) string {
 	if info.DSN != "" {
 		return info.DSN
 	}
 
-	// DB2 DSN格式: HOSTNAME=host;DATABASE=db;PORT=port;UID=user;PWD=password
+	// DB2 DSN格式: HOSTNAME=host;DATABASE=db;PORT=port;UID=user;PWD=password;PROTOCOL=TCPIP;
+	// 更多连接参数请参考：https://www.ibm.com/docs/en/db2/11.5?topic=odbc-cliodbc-configuration-keywords
 	var dsn string
 	if info.Database != "" {
-		dsn = fmt.Sprintf("HOSTNAME=%s;DATABASE=%s;PORT=%s;UID=%s;PWD=%s",
+		dsn = fmt.Sprintf("HOSTNAME=%s;DATABASE=%s;PORT=%s;UID=%s;PWD=%s;PROTOCOL=TCPIP;",
 			info.Host,
 			info.Database,
 			info.Port,
@@ -451,7 +488,7 @@ func BuildDB2DSN(info ConnectionInfo) string {
 			info.Password,
 		)
 	} else {
-		dsn = fmt.Sprintf("HOSTNAME=%s;PORT=%s;UID=%s;PWD=%s",
+		dsn = fmt.Sprintf("HOSTNAME=%s;PORT=%s;UID=%s;PWD=%s;PROTOCOL=TCPIP;",
 			info.Host,
 			info.Port,
 			info.User,

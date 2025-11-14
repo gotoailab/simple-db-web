@@ -3782,6 +3782,8 @@ async function selectTable(tableName) {
         filterManager.clear();
         updateFilterButton();
     }
+    // 重置排序状态（切换表时重置排序）
+    dataTableSortState = { field: null, direction: null };
     
     // 切换到数据标签页
     switchTab('data');
@@ -3797,6 +3799,24 @@ let currentColumns = [];
 
 // 存储当前过滤条件
 let currentFilters = null;
+
+// 排序状态管理
+let dataTableSortState = {
+    field: null,  // 当前排序的字段
+    direction: null  // 'asc', 'desc', null
+};
+
+let queryResultsSortState = {
+    field: null,
+    direction: null
+};
+
+// 存储当前显示的数据（用于前端排序）
+let currentTableData = {
+    rows: [],
+    total: 0,
+    isClickHouse: false
+};
 
 // 筛选条件管理
 const filterManager = {
@@ -4081,6 +4101,10 @@ async function loadTableData() {
             showNotification(errorMessage, 'error');
             // 即使获取数据失败，如果有列信息，也要显示表头
             if (currentColumns.length > 0) {
+                // 清空当前数据
+                currentTableData.rows = [];
+                currentTableData.total = 0;
+                currentTableData.isClickHouse = false;
                 displayTableData([], 0, false);
             }
             hideLoading(dataLoading);
@@ -4150,6 +4174,12 @@ async function loadTableData() {
 
             // 检查是否为 ClickHouse
             const isClickHouse = data.isClickHouse || false;
+            
+            // 保存当前数据（用于前端排序）
+            currentTableData.rows = dataByColumns;
+            currentTableData.total = data.total;
+            currentTableData.isClickHouse = isClickHouse;
+            
             displayTableData(dataByColumns, data.total, isClickHouse);
             
             // 计算是否有下一页
@@ -4221,14 +4251,57 @@ function displayTableData(rows, total, isClickHouse = false) {
         const headRow = document.createElement('tr');
         columns.forEach(col => {
             const th = document.createElement('th');
-            th.textContent = col;
+            th.style.cssText = 'cursor: pointer; user-select: none; position: relative; padding-right: 1.5rem;';
+            th.className = 'sortable-header';
+            th.dataset.field = col;
+            
+            // 创建表头内容容器
+            const headerContent = document.createElement('span');
+            headerContent.textContent = col;
+            th.appendChild(headerContent);
+            
+            // 创建排序指示器
+            const sortIndicator = document.createElement('span');
+            sortIndicator.className = 'sort-indicator';
+            sortIndicator.style.cssText = 'position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--text-secondary);';
+            
+            // 设置初始排序指示器状态
+            if (dataTableSortState.field === col) {
+                if (dataTableSortState.direction === 'asc') {
+                    sortIndicator.textContent = '↑';
+                    sortIndicator.style.color = 'var(--primary-color)';
+                } else if (dataTableSortState.direction === 'desc') {
+                    sortIndicator.textContent = '↓';
+                    sortIndicator.style.color = 'var(--primary-color)';
+                }
+            }
+            th.appendChild(sortIndicator);
+            
+            // 添加点击事件
+            th.addEventListener('click', () => {
+                handleDataTableSort(col);
+            });
+            
+            // 添加悬停效果
+            th.addEventListener('mouseenter', () => {
+                if (dataTableSortState.field !== col) {
+                    sortIndicator.textContent = '⇅';
+                    sortIndicator.style.color = 'var(--text-secondary)';
+                }
+            });
+            th.addEventListener('mouseleave', () => {
+                if (dataTableSortState.field !== col) {
+                    sortIndicator.textContent = '';
+                }
+            });
+            
             headRow.appendChild(th);
         });
         // ClickHouse 不显示操作列
         if (!isClickHouse) {
             const actionTh = document.createElement('th');
             actionTh.className = 'action-column-header';
-            actionTh.textContent = '操作';
+            actionTh.textContent = t('common.operation');
             headRow.appendChild(actionTh);
         }
         dataTableHead.appendChild(headRow);
@@ -4247,8 +4320,14 @@ function displayTableData(rows, total, isClickHouse = false) {
         return;
     }
     
+    // 应用排序（如果有）
+    let sortedRows = [...rows];
+    if (dataTableSortState.field && dataTableSortState.direction) {
+        sortedRows = sortRows(rows, dataTableSortState.field, dataTableSortState.direction);
+    }
+    
     // 创建表体
-    rows.forEach((row, index) => {
+    sortedRows.forEach((row, index) => {
         const bodyRow = document.createElement('tr');
         
         // 按照列顺序添加单元格
@@ -4635,6 +4714,7 @@ function displayQueryResult(resultId) {
     }
     
     queryResultsHistory.currentResultId = resultId;
+    // 注意：切换结果时不清除排序状态，保持用户的排序选择
     displayQueryResults(result.data);
     updateQueryResultsTabs(); // 更新tab高亮
 }
@@ -4648,23 +4728,99 @@ function displayQueryResults(rows) {
     
     const columns = Object.keys(rows[0]);
     
-    let html = '<table><thead><tr>';
+    // 应用排序（如果有）
+    let sortedRows = [...rows];
+    if (queryResultsSortState.field && queryResultsSortState.direction) {
+        sortedRows = sortRows(rows, queryResultsSortState.field, queryResultsSortState.direction);
+    }
+    
+    // 创建表格容器
+    const tableContainer = document.createElement('div');
+    tableContainer.style.cssText = 'overflow-x: auto;';
+    
+    const table = document.createElement('table');
+    table.style.cssText = 'width: 100%; border-collapse: collapse;';
+    
+    // 创建表头
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
     columns.forEach(col => {
-        html += `<th>${escapeHtml(col)}</th>`;
-    });
-    html += '</tr></thead><tbody>';
-    
-    rows.forEach(row => {
-        html += '<tr>';
-        columns.forEach(col => {
-            const value = row[col];
-            html += `<td>${value === null ? '<span style="color: var(--text-secondary);">NULL</span>' : escapeHtml(String(value))}</td>`;
+        const th = document.createElement('th');
+        th.style.cssText = 'cursor: pointer; user-select: none; position: relative; padding: 0.75rem; text-align: left; border-bottom: 2px solid var(--border-color); background: var(--surface-light);';
+        th.className = 'sortable-header';
+        th.dataset.field = col;
+        
+        // 创建表头内容容器
+        const headerContent = document.createElement('span');
+        headerContent.textContent = col;
+        th.appendChild(headerContent);
+        
+        // 创建排序指示器
+        const sortIndicator = document.createElement('span');
+        sortIndicator.className = 'sort-indicator';
+        sortIndicator.style.cssText = 'position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); font-size: 0.75rem; color: var(--text-secondary);';
+        
+        // 设置初始排序指示器状态
+        if (queryResultsSortState.field === col) {
+            if (queryResultsSortState.direction === 'asc') {
+                sortIndicator.textContent = '↑';
+                sortIndicator.style.color = 'var(--primary-color)';
+            } else if (queryResultsSortState.direction === 'desc') {
+                sortIndicator.textContent = '↓';
+                sortIndicator.style.color = 'var(--primary-color)';
+            }
+        }
+        th.appendChild(sortIndicator);
+        
+        // 添加点击事件
+        th.addEventListener('click', () => {
+            handleQueryResultsSort(col);
         });
-        html += '</tr>';
+        
+        // 添加悬停效果
+        th.addEventListener('mouseenter', () => {
+            if (queryResultsSortState.field !== col) {
+                sortIndicator.textContent = '⇅';
+                sortIndicator.style.color = 'var(--text-secondary)';
+            }
+        });
+        th.addEventListener('mouseleave', () => {
+            if (queryResultsSortState.field !== col) {
+                sortIndicator.textContent = '';
+            }
+        });
+        
+        headRow.appendChild(th);
     });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
     
-    html += '</tbody></table>';
-    queryResults.innerHTML = html;
+    // 创建表体
+    const tbody = document.createElement('tbody');
+    sortedRows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom: 1px solid var(--border-color);';
+        columns.forEach(col => {
+            const td = document.createElement('td');
+            td.style.cssText = 'padding: 0.75rem;';
+            const value = row[col];
+            if (value === null || value === undefined) {
+                const nullSpan = document.createElement('span');
+                nullSpan.style.color = 'var(--text-secondary)';
+                nullSpan.textContent = t('common.null');
+                td.appendChild(nullSpan);
+            } else {
+                td.textContent = String(value);
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    
+    tableContainer.appendChild(table);
+    queryResults.innerHTML = '';
+    queryResults.appendChild(tableContainer);
 }
 
 // 更新查询结果Tab显示
@@ -5136,6 +5292,103 @@ closeDeleteModal.addEventListener('click', () => {
 cancelDelete.addEventListener('click', () => {
     deleteModal.style.display = 'none';
 });
+
+// 处理数据表格排序
+function handleDataTableSort(field) {
+    // 切换排序状态：无排序 -> 升序 -> 降序 -> 无排序
+    if (dataTableSortState.field !== field) {
+        // 新字段：设置为升序
+        dataTableSortState.field = field;
+        dataTableSortState.direction = 'asc';
+    } else {
+        // 同一字段：切换方向
+        if (dataTableSortState.direction === 'asc') {
+            dataTableSortState.direction = 'desc';
+        } else if (dataTableSortState.direction === 'desc') {
+            // 降序后再次点击：取消排序
+            dataTableSortState.field = null;
+            dataTableSortState.direction = null;
+        }
+    }
+    
+    // 使用当前已显示的数据重新显示（应用排序）
+    if (currentTableData.rows.length > 0) {
+        displayTableData(currentTableData.rows, currentTableData.total, currentTableData.isClickHouse);
+    }
+}
+
+// 处理查询结果排序
+function handleQueryResultsSort(field) {
+    // 切换排序状态：无排序 -> 升序 -> 降序 -> 无排序
+    if (queryResultsSortState.field !== field) {
+        // 新字段：设置为升序
+        queryResultsSortState.field = field;
+        queryResultsSortState.direction = 'asc';
+    } else {
+        // 同一字段：切换方向
+        if (queryResultsSortState.direction === 'asc') {
+            queryResultsSortState.direction = 'desc';
+        } else if (queryResultsSortState.direction === 'desc') {
+            // 降序后再次点击：取消排序
+            queryResultsSortState.field = null;
+            queryResultsSortState.direction = null;
+        }
+    }
+    
+    // 重新显示当前查询结果
+    const currentResult = queryResultsHistory.getCurrent();
+    if (currentResult) {
+        displayQueryResult(currentResult.id);
+    }
+}
+
+// 排序行数据
+function sortRows(rows, field, direction) {
+    const sorted = [...rows];
+    
+    sorted.sort((a, b) => {
+        let aVal = a[field];
+        let bVal = b[field];
+        
+        // 处理 null/undefined
+        if (aVal === null || aVal === undefined) {
+            aVal = '';
+        }
+        if (bVal === null || bVal === undefined) {
+            bVal = '';
+        }
+        
+        // 尝试数字比较
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        const aIsNum = !isNaN(aNum) && isFinite(aNum) && String(aVal).trim() !== '';
+        const bIsNum = !isNaN(bNum) && isFinite(bNum) && String(bVal).trim() !== '';
+        
+        if (aIsNum && bIsNum) {
+            // 都是数字，进行数字比较
+            return direction === 'asc' ? aNum - bNum : bNum - aNum;
+        } else if (aIsNum) {
+            // a是数字，b不是，数字排在前面（升序）或后面（降序）
+            return direction === 'asc' ? -1 : 1;
+        } else if (bIsNum) {
+            // b是数字，a不是
+            return direction === 'asc' ? 1 : -1;
+        } else {
+            // 都是字符串，进行字符串比较
+            const aStr = String(aVal).toLowerCase();
+            const bStr = String(bVal).toLowerCase();
+            if (aStr < bStr) {
+                return direction === 'asc' ? -1 : 1;
+            } else if (aStr > bStr) {
+                return direction === 'asc' ? 1 : -1;
+            } else {
+                return 0;
+            }
+        }
+    });
+    
+    return sorted;
+}
 
 // 工具函数
 function escapeHtml(text) {

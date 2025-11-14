@@ -3,14 +3,18 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
+	"sync"
 
 	_ "github.com/ClickHouse/clickhouse-go"
 )
 
 // ClickHouse 实现Database接口
 type ClickHouse struct {
-	db *sql.DB
+	db              *sql.DB
+	currentDatabase string
+	dbMutex         sync.RWMutex // 保护 currentDatabase 的并发访问
 }
 
 // NewClickHouse 创建ClickHouse实例
@@ -26,6 +30,33 @@ func (c *ClickHouse) Connect(dsn string) error {
 		dsn = "tcp://" + dsn
 	}
 
+	// 从 DSN 中提取数据库名
+	var dbName string
+	if strings.HasPrefix(dsn, "tcp://") {
+		// 解析 tcp://host:port?username=user&password=pass&database=db
+		dsnWithoutProtocol := strings.TrimPrefix(dsn, "tcp://")
+		if idx := strings.Index(dsnWithoutProtocol, "?"); idx >= 0 {
+			query := dsnWithoutProtocol[idx+1:]
+			if parsed, err := url.ParseQuery(query); err == nil {
+				if db := parsed.Get("database"); db != "" {
+					dbName = db
+				}
+			}
+		}
+	} else if strings.HasPrefix(dsn, "clickhouse://") {
+		// 解析 clickhouse://user:pass@host:port/database
+		if parsed, err := url.Parse(dsn); err == nil {
+			if parsed.Path != "" {
+				dbName = strings.TrimPrefix(parsed.Path, "/")
+			}
+		}
+	}
+
+	// 如果没有从 DSN 中提取到数据库名，默认为 default
+	if dbName == "" {
+		dbName = "default"
+	}
+
 	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return fmt.Errorf("打开数据库连接失败: %w", err)
@@ -39,6 +70,12 @@ func (c *ClickHouse) Connect(dsn string) error {
 	if oldDB != nil {
 		oldDB.Close()
 	}
+
+	// 存储当前数据库名
+	c.dbMutex.Lock()
+	c.currentDatabase = dbName
+	c.dbMutex.Unlock()
+
 	return nil
 }
 
@@ -71,8 +108,18 @@ func (c *ClickHouse) GetTables() ([]string, error) {
 
 // GetTableSchema 获取表结构
 func (c *ClickHouse) GetTableSchema(tableName string) (string, error) {
+	// 获取存储的当前数据库名
+	c.dbMutex.RLock()
+	currentDB := c.currentDatabase
+	c.dbMutex.RUnlock()
+
+	if currentDB == "" {
+		return "", fmt.Errorf("当前数据库未设置")
+	}
+
 	// ClickHouse 使用 DESCRIBE TABLE 获取表结构
-	rows, err := c.db.Query(fmt.Sprintf("DESCRIBE TABLE `%s`", tableName))
+	// 使用 database.table 格式确保查询正确的数据库
+	rows, err := c.db.Query(fmt.Sprintf("DESCRIBE TABLE `%s`.`%s`", currentDB, tableName))
 	if err != nil {
 		return "", fmt.Errorf("查询表结构失败: %w", err)
 	}
@@ -112,7 +159,17 @@ func (c *ClickHouse) GetTableSchema(tableName string) (string, error) {
 
 // GetTableColumns 获取表的列信息
 func (c *ClickHouse) GetTableColumns(tableName string) ([]ColumnInfo, error) {
-	query := fmt.Sprintf("DESCRIBE TABLE `%s`", tableName)
+	// 获取存储的当前数据库名
+	c.dbMutex.RLock()
+	currentDB := c.currentDatabase
+	c.dbMutex.RUnlock()
+
+	if currentDB == "" {
+		return nil, fmt.Errorf("当前数据库未设置")
+	}
+
+	// 使用 database.table 格式确保查询正确的数据库
+	query := fmt.Sprintf("DESCRIBE TABLE `%s`.`%s`", currentDB, tableName)
 	rows, err := c.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("查询列信息失败: %w", err)
@@ -206,7 +263,18 @@ func (c *ClickHouse) ExecuteInsert(query string) (int64, error) {
 func (c *ClickHouse) GetTableData(tableName string, page, pageSize int) ([]map[string]interface{}, int64, error) {
 	// ClickHouse 不支持分页，只返回10条数据
 	// 注意：total 返回 -1 表示不支持计数
-	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT 10", tableName)
+
+	// 获取存储的当前数据库名
+	c.dbMutex.RLock()
+	currentDB := c.currentDatabase
+	c.dbMutex.RUnlock()
+
+	if currentDB == "" {
+		return nil, 0, fmt.Errorf("当前数据库未设置")
+	}
+
+	// 使用 database.table 格式确保查询正确的数据库
+	query := fmt.Sprintf("SELECT * FROM `%s`.`%s` LIMIT 10", currentDB, tableName)
 
 	rows, err := c.db.Query(query)
 	if err != nil {
@@ -284,6 +352,12 @@ func (c *ClickHouse) SwitchDatabase(databaseName string) error {
 	if err != nil {
 		return fmt.Errorf("切换数据库失败: %w", err)
 	}
+
+	// 更新存储的数据库名
+	c.dbMutex.Lock()
+	c.currentDatabase = databaseName
+	c.dbMutex.Unlock()
+
 	return nil
 }
 

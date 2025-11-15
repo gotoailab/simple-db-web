@@ -6,6 +6,7 @@ require (
 	github.com/chenhg5/simple-db-web v0.0.0
 	github.com/gin-gonic/gin v1.11.0
 	golang.org/x/crypto v0.40.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.29.0
 )
 

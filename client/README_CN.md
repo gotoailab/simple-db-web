@@ -58,6 +58,10 @@ go mod tidy
 - `-db` (默认: `client.db`): 数据库文件路径
   - 仅在启用认证时使用
   - 示例: `-db ./data/client.db`
+  
+- `-connections` (默认: 空): 预设连接的 YAML 文件路径
+  - 如果指定，YAML 文件中的连接将被加载并在 UI 中可用
+  - 示例: `-connections ./config/connections.yaml`
 
 #### 使用示例
 
@@ -82,10 +86,72 @@ go run main.go \
   -auth \
   -prefix /v1 \
   -open \
-  -db ./data/client.db
+  -db ./data/client.db \
+  -connections ./config/connections.yaml
 ```
 
-### 3. 访问应用
+### 3. 预设连接
+
+您可以使用 YAML 文件预配置数据库连接。创建具有以下结构的 YAML 文件：
+
+```yaml
+connections:
+  - name: "生产环境 MySQL"
+    type: "mysql"
+    host: "localhost"
+    port: "3306"
+    user: "root"
+    password: "password"
+    database: "testdb"
+  - name: "测试环境 PostgreSQL"
+    type: "postgresql"
+    host: "localhost"
+    port: "5432"
+    user: "postgres"
+    password: "postgres"
+    database: "testdb"
+  - name: "本地 SQLite"
+    type: "sqlite"
+    database: "/path/to/database.db"
+  - name: "带代理的 MySQL"
+    type: "mysql"
+    host: "remote-host"
+    port: "3306"
+    user: "user"
+    password: "password"
+    database: "dbname"
+    proxy:
+      type: "ssh"
+      host: "proxy-host"
+      port: "22"
+      user: "ssh-user"
+      password: "ssh-password"
+      # 或使用 key_file 代替 password
+      # key_file: "/path/to/private/key"
+```
+
+**支持的数据库类型：**
+- `mysql` - MySQL / MariaDB / OceanBase
+- `postgresql` - PostgreSQL
+- `sqlite` - SQLite3
+- `clickhouse` - ClickHouse
+- `oracle` - Oracle 数据库
+- `sqlserver` / `mssql` - Microsoft SQL Server
+- `mongodb` - MongoDB
+
+**注意：** YAML 文件中的密码以明文形式存储。请确保使用适当的文件权限保护该文件。
+
+#### 使用预设连接
+
+```bash
+# 使用预设连接运行
+go run main.go -connections ./config/connections.yaml
+
+# 启用认证并使用预设连接运行
+go run main.go -auth -connections ./config/connections.yaml
+```
+
+### 4. 访问应用
 
 打开浏览器访问：`http://localhost:8080`
 

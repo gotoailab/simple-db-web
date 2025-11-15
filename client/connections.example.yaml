@@ -1,0 +1,58 @@
+# Example connections configuration file
+# Copy this file and modify it with your actual connection details
+
+connections:
+  # MySQL Example
+  - name: "Production MySQL"
+    type: "mysql"
+    host: "localhost"
+    port: "3306"
+    user: "root"
+    password: "password"
+    database: "testdb"
+
+  # PostgreSQL Example
+  - name: "Test PostgreSQL"
+    type: "postgresql"
+    host: "localhost"
+    port: "5432"
+    user: "postgres"
+    password: "postgres"
+    database: "testdb"
+
+  # SQLite Example
+  - name: "Local SQLite"
+    type: "sqlite"
+    database: "/path/to/database.db"
+
+  # ClickHouse Example
+  - name: "Analytics ClickHouse"
+    type: "clickhouse"
+    host: "localhost"
+    port: "9000"
+    user: "default"
+    password: ""
+    database: "default"
+
+  # MySQL with SSH Proxy Example
+  - name: "Remote MySQL via SSH"
+    type: "mysql"
+    host: "remote-db-host"
+    port: "3306"
+    user: "dbuser"
+    password: "dbpassword"
+    database: "dbname"
+    proxy:
+      type: "ssh"
+      host: "ssh-proxy-host"
+      port: "22"
+      user: "ssh-user"
+      password: "ssh-password"
+      # Alternative: use key_file instead of password
+      # key_file: "/path/to/private/key"
+
+  # Using DSN connection string
+  - name: "MySQL via DSN"
+    type: "mysql"
+    dsn: "user:password@tcp(localhost:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
+

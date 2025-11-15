@@ -58,6 +58,10 @@ The application supports the following command-line arguments:
 - `-db` (default: `client.db`): Database file path
   - Only used when authentication is enabled
   - Example: `-db ./data/client.db`
+  
+- `-connections` (default: empty): Path to YAML file containing preset connections
+  - If specified, connections from the YAML file will be loaded and available in the UI
+  - Example: `-connections ./config/connections.yaml`
 
 #### Usage Examples
 
@@ -82,10 +86,72 @@ go run main.go \
   -auth \
   -prefix /v1 \
   -open \
-  -db ./data/client.db
+  -db ./data/client.db \
+  -connections ./config/connections.yaml
 ```
 
-### 3. Access Application
+### 3. Preset Connections
+
+You can pre-configure database connections using a YAML file. Create a YAML file with the following structure:
+
+```yaml
+connections:
+  - name: "Production MySQL"
+    type: "mysql"
+    host: "localhost"
+    port: "3306"
+    user: "root"
+    password: "password"
+    database: "testdb"
+  - name: "Test PostgreSQL"
+    type: "postgresql"
+    host: "localhost"
+    port: "5432"
+    user: "postgres"
+    password: "postgres"
+    database: "testdb"
+  - name: "Local SQLite"
+    type: "sqlite"
+    database: "/path/to/database.db"
+  - name: "MySQL with Proxy"
+    type: "mysql"
+    host: "remote-host"
+    port: "3306"
+    user: "user"
+    password: "password"
+    database: "dbname"
+    proxy:
+      type: "ssh"
+      host: "proxy-host"
+      port: "22"
+      user: "ssh-user"
+      password: "ssh-password"
+      # Or use key_file instead of password
+      # key_file: "/path/to/private/key"
+```
+
+**Supported database types:**
+- `mysql` - MySQL / MariaDB / OceanBase
+- `postgresql` - PostgreSQL
+- `sqlite` - SQLite3
+- `clickhouse` - ClickHouse
+- `oracle` - Oracle Database
+- `sqlserver` / `mssql` - Microsoft SQL Server
+- `mongodb` - MongoDB
+
+**Note:** Passwords in the YAML file are stored in plain text. Make sure to secure the file with appropriate file permissions.
+
+#### Usage with Preset Connections
+
+```bash
+# Run with preset connections
+go run main.go -connections ./config/connections.yaml
+
+# Run with authentication and preset connections
+go run main.go -auth -connections ./config/connections.yaml
+```
+
+### 4. Access Application
 
 Open your browser and visit: `http://localhost:8080`
 

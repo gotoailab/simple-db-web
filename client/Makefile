@@ -19,6 +19,7 @@ PREFIX ?=
 DEBUG ?= false
 AUTH ?= false
 OPEN ?= false
+CONNECTIONS ?=
 
 help:
 	@echo "SimpleDBWeb Client Makefile"
@@ -48,6 +49,7 @@ help:
 	@echo "  DEBUG=false            - Enable debug mode (true/false)"
 	@echo "  AUTH=false             - Enable authentication (true/false)"
 	@echo "  OPEN=false             - Auto-open browser (true/false)"
+	@echo "  CONNECTIONS=            - Path to YAML file with preset connections"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make run"
@@ -65,7 +67,8 @@ run:
 		$$([ "$(DEBUG)" = "true" ] && echo "-debug") \
 		$$([ -n "$(LOG_FILE)" ] && echo "-log $(LOG_FILE)") \
 		$$([ -n "$(PREFIX)" ] && echo "-prefix $(PREFIX)") \
-		$$([ "$(OPEN)" = "true" ] && echo "-open")
+		$$([ "$(OPEN)" = "true" ] && echo "-open") \
+		$$([ -n "$(CONNECTIONS)" ] && echo "-connections $(CONNECTIONS)")
 
 run-auth:
 	@echo "Starting SimpleDBWeb Client with Authentication..."
@@ -78,7 +81,8 @@ run-auth:
 		$$([ "$(DEBUG)" = "true" ] && echo "-debug") \
 		$$([ -n "$(LOG_FILE)" ] && echo "-log $(LOG_FILE)") \
 		$$([ -n "$(PREFIX)" ] && echo "-prefix $(PREFIX)") \
-		$$([ "$(OPEN)" = "true" ] && echo "-open")
+		$$([ "$(OPEN)" = "true" ] && echo "-open") \
+		$$([ -n "$(CONNECTIONS)" ] && echo "-connections $(CONNECTIONS)")
 
 # 构建标志
 LDFLAGS = -s -w \

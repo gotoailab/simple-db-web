@@ -14,6 +14,7 @@ import (
 	"github.com/chenhg5/simple-db-web/database"
 	"github.com/chenhg5/simple-db-web/handlers"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed static/user-management.js
@@ -39,6 +40,12 @@ type Config struct {
 	RoutePrefix string
 	AutoOpen    bool
 	DBPath      string
+	Connections string // 预设连接 YAML 文件路径
+}
+
+// ConnectionsConfig YAML 配置文件结构
+type ConnectionsConfig struct {
+	Connections []database.ConnectionInfo `yaml:"connections"`
 }
 
 func main() {
@@ -76,6 +83,15 @@ func main() {
 	// 如果启用认证，设置自定义脚本（注入用户管理UI）
 	if config.EnableAuth {
 		server.SetCustomScript(userManagementScript)
+	}
+
+	// 加载预设连接
+	if config.Connections != "" {
+		if err := loadPresetConnections(server, config.Connections); err != nil {
+			log.Printf("Warning: Failed to load preset connections: %v", err)
+		} else {
+			log.Printf("Loaded preset connections from: %s", config.Connections)
+		}
 	}
 
 	// 创建Gin引擎
@@ -213,6 +229,7 @@ func parseFlags() *Config {
 	flag.StringVar(&config.RoutePrefix, "prefix", "", "Route prefix (e.g., /v1, /api)")
 	flag.BoolVar(&config.AutoOpen, "open", false, "Automatically open browser after startup")
 	flag.StringVar(&config.DBPath, "db", "client.db", "Database file path (only used when auth is enabled)")
+	flag.StringVar(&config.Connections, "connections", "", "Path to YAML file containing preset connections")
 
 	flag.Parse()
 
@@ -278,4 +295,31 @@ func openBrowser(url string) {
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to open browser: %v", err)
 	}
+}
+
+// loadPresetConnections 从 YAML 文件加载预设连接
+func loadPresetConnections(server *handlers.Server, yamlPath string) error {
+	// 读取 YAML 文件
+	data, err := os.ReadFile(yamlPath)
+	if err != nil {
+		return fmt.Errorf("failed to read connections file: %w", err)
+	}
+
+	// 解析 YAML
+	var config ConnectionsConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	// 验证连接信息
+	if len(config.Connections) == 0 {
+		log.Printf("No connections found in YAML file")
+		return nil
+	}
+
+	// 设置预设连接
+	server.SetPresetConnections(config.Connections)
+	log.Printf("Loaded %d preset connection(s)", len(config.Connections))
+
+	return nil
 }

@@ -576,13 +576,35 @@
             modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
             
             const modalContent = document.createElement('div');
-            modalContent.style.cssText = 'background: var(--surface); border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);';
+            modalContent.style.cssText = 'background: var(--surface); border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); position: relative;';
             modalContent.innerHTML = 
-                '<h2 style="margin-bottom: 1.5rem; color: var(--text-primary);">' + escapeHtml(title) + '</h2>' +
+                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">' +
+                    '<h2 style="margin: 0; color: var(--text-primary);">' + escapeHtml(title) + '</h2>' +
+                    '<button class="modal-close-btn" style="background: transparent; border: none; font-size: 1.5rem; color: var(--text-secondary); cursor: pointer; padding: 0; width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;" title="' + (t('common.close') || 'Close') + '">' +
+                        '×' +
+                    '</button>' +
+                '</div>' +
                 content;
 
             modal.appendChild(modalContent);
             document.body.appendChild(modal);
+
+            // 绑定关闭按钮事件
+            const closeBtn = modalContent.querySelector('.modal-close-btn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    closeModal(modal);
+                });
+                // 添加悬停效果
+                closeBtn.addEventListener('mouseenter', () => {
+                    closeBtn.style.background = 'var(--surface-light)';
+                    closeBtn.style.color = 'var(--text-primary)';
+                });
+                closeBtn.addEventListener('mouseleave', () => {
+                    closeBtn.style.background = 'transparent';
+                    closeBtn.style.color = 'var(--text-secondary)';
+                });
+            }
 
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {

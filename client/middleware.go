@@ -7,12 +7,28 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// 全局变量存储路由前缀（用于认证中间件）
+var routePrefix string
+
+// SetRoutePrefix 设置路由前缀（供中间件使用）
+func SetRoutePrefix(prefix string) {
+	routePrefix = prefix
+}
+
 // AuthMiddleware 认证中间件
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 允许登录页面和登录API访问
 		path := c.Request.URL.Path
-		if path == "/login" || path == "/api/auth/login" || strings.HasPrefix(path, "/static/") {
+		
+		// 移除路由前缀以便匹配
+		checkPath := path
+		if routePrefix != "" && strings.HasPrefix(path, routePrefix) {
+			checkPath = strings.TrimPrefix(path, routePrefix)
+		}
+		
+		// 检查是否是登录页面、登录API或静态文件
+		if checkPath == "/login" || checkPath == "/api/auth/login" || strings.HasPrefix(checkPath, "/static/") {
 			c.Next()
 			return
 		}
@@ -21,7 +37,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		sessionID, err := c.Cookie("session_id")
 		if err != nil || sessionID == "" {
 			// 如果请求的是API，返回JSON错误
-			if strings.HasPrefix(path, "/api/") {
+			if strings.HasPrefix(checkPath, "/api/") {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"success": false,
 					"error":   "unauthorized",
@@ -30,8 +46,12 @@ func AuthMiddleware() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			// 否则重定向到登录页
-			c.Redirect(http.StatusFound, "/login")
+			// 否则重定向到登录页（考虑路由前缀）
+			loginPath := "/login"
+			if routePrefix != "" {
+				loginPath = routePrefix + loginPath
+			}
+			c.Redirect(http.StatusFound, loginPath)
 			c.Abort()
 			return
 		}
@@ -41,7 +61,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		if err != nil {
 			// 清除无效的cookie
 			c.SetCookie("session_id", "", -1, "/", "", false, true)
-			if strings.HasPrefix(path, "/api/") {
+			if strings.HasPrefix(checkPath, "/api/") {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"success": false,
 					"error":   "unauthorized",
@@ -50,7 +70,12 @@ func AuthMiddleware() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			c.Redirect(http.StatusFound, "/login")
+			// 重定向到登录页（考虑路由前缀）
+			loginPath := "/login"
+			if routePrefix != "" {
+				loginPath = routePrefix + loginPath
+			}
+			c.Redirect(http.StatusFound, loginPath)
 			c.Abort()
 			return
 		}

@@ -1,127 +1,167 @@
 # SimpleDBWeb Client
 
-这是一个完整的 SimpleDBWeb 客户端版本，包含用户认证和管理功能。
+This is a complete SimpleDBWeb client version with user authentication and management features.
 
-## 功能特性
+## Features
 
-- ✅ 用户登录和认证
-- ✅ Session 管理（使用 SQLite 存储）
-- ✅ 用户管理（管理员可以创建、编辑、删除用户）
-- ✅ 修改密码功能
-- ✅ 退出登录功能
-- ✅ 通过 `SetCustomScript` 注入用户管理 UI（不侵入核心代码）
+- ✅ User login and authentication
+- ✅ Session management (stored in SQLite)
+- ✅ User management (admins can create, edit, and delete users)
+- ✅ Password change functionality
+- ✅ Logout functionality
+- ✅ User management UI injected via `SetCustomScript` (non-intrusive to core code)
 
-## 技术栈
+## Tech Stack
 
-- **Web 框架**: Gin
-- **数据库**: modernc.org/sqlite（用于存储用户和 session）
-- **认证**: Session-based authentication
-- **密码加密**: bcrypt
+- **Web Framework**: Gin
+- **Database**: modernc.org/sqlite (for storing users and sessions)
+- **Authentication**: Session-based authentication
+- **Password Encryption**: bcrypt
 
-## 安装和运行
+## Installation and Running
 
-### 1. 安装依赖
+### 1. Install Dependencies
 
 ```bash
 cd client
 go mod tidy
 ```
 
-### 2. 运行应用
+### 2. Run Application
+
+The application supports the following command-line arguments:
+
+#### Basic Parameters
+
+- `-port` (default: `:8080`): Server port
+  - Example: `-port :8080` or `-port 8080`
+  
+- `-debug` (default: `false`): Enable debug mode
+  - When enabled, detailed debug logs will be printed
+  - Example: `-debug`
+  
+- `-log` (default: empty): Log file path
+  - If specified, logs will be written to the file
+  - Example: `-log ./logs/app.log`
+  
+- `-auth` (default: `false`): Enable authentication and user management
+  - When enabled, login interface and user management features will be available
+  - Example: `-auth`
+  
+- `-prefix` (default: empty): Route prefix
+  - All routes will have this prefix added
+  - Example: `-prefix /v1` or `-prefix /api`
+  
+- `-open` (default: `false`): Automatically open browser after startup
+  - Example: `-open`
+  
+- `-db` (default: `client.db`): Database file path
+  - Only used when authentication is enabled
+  - Example: `-db ./data/client.db`
+
+#### Usage Examples
 
 ```bash
-go run main.go [数据库文件路径] [端口]
-```
-
-示例：
-```bash
-# 使用默认配置（client.db, :8080）
+# Basic usage (no authentication)
 go run main.go
 
-# 指定数据库文件路径
-go run main.go /path/to/database.db
+# Enable authentication and user management
+go run main.go -auth -db ./data/client.db
 
-# 指定数据库文件路径和端口
-go run main.go /path/to/database.db 8080
+# Custom port and route prefix
+go run main.go -port :9000 -prefix /v1
+
+# Enable debug mode and log file
+go run main.go -debug -log ./logs/app.log
+
+# Full configuration example
+go run main.go \
+  -port :8080 \
+  -debug \
+  -log ./logs/app.log \
+  -auth \
+  -prefix /v1 \
+  -open \
+  -db ./data/client.db
 ```
 
-### 3. 访问应用
+### 3. Access Application
 
-打开浏览器访问：`http://localhost:8080`
+Open your browser and visit: `http://localhost:8080`
 
-默认管理员账户：
-- 用户名: `admin`
-- 密码: `admin123`
+Default admin account:
+- Username: `admin`
+- Password: `admin123`
 
-**重要**: 首次运行后请立即修改默认管理员密码！
+**Important**: Please change the default admin password immediately after first run!
 
-## 项目结构
+## Project Structure
 
 ```
 client/
-├── main.go              # 主程序入口
-├── db.go                # 数据库初始化和表结构
-├── auth.go              # 用户认证和 session 管理
-├── middleware.go        # 认证中间件
-├── handlers.go          # HTTP 请求处理器
-├── go.mod               # Go 模块定义
-├── templates/           # HTML 模板
-│   └── login.html       # 登录页面
-└── static/              # 静态文件
-    └── user-management.js  # 用户管理 UI（通过 embed 引入）
+├── main.go              # Main program entry
+├── db.go                # Database initialization and table structure
+├── auth.go              # User authentication and session management
+├── middleware.go        # Authentication middleware
+├── handlers.go          # HTTP request handlers
+├── go.mod               # Go module definition
+├── templates/           # HTML templates
+│   └── login.html       # Login page
+└── static/              # Static files
+    └── user-management.js  # User management UI (injected via embed)
 ```
 
-## API 接口
+## API Endpoints
 
-### 认证相关
+### Authentication
 
-- `POST /api/auth/login` - 用户登录
-- `POST /api/auth/logout` - 退出登录
-- `GET /api/auth/current` - 获取当前用户信息
-- `POST /api/auth/password` - 修改密码
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - Logout
+- `GET /api/auth/current` - Get current user information
+- `POST /api/auth/password` - Change password
 
-### 用户管理（需要管理员权限）
+### User Management (Admin Only)
 
-- `GET /api/users` - 获取所有用户列表
-- `POST /api/users` - 创建新用户
-- `PUT /api/users/:id` - 更新用户信息
-- `DELETE /api/users/:id` - 删除用户
+- `GET /api/users` - Get all users list
+- `POST /api/users` - Create new user
+- `PUT /api/users/:id` - Update user information
+- `DELETE /api/users/:id` - Delete user
 
-## 数据库结构
+## Database Structure
 
-### users 表
+### users Table
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER | 主键，自增 |
-| username | TEXT | 用户名（唯一） |
-| password_hash | TEXT | 密码哈希值 |
-| is_admin | INTEGER | 是否为管理员（0/1） |
-| created_at | DATETIME | 创建时间 |
-| updated_at | DATETIME | 更新时间 |
+| Field | Type | Description |
+|-------|------|-------------|
+| id | INTEGER | Primary key, auto-increment |
+| username | TEXT | Username (unique) |
+| password_hash | TEXT | Password hash value |
+| is_admin | INTEGER | Is administrator (0/1) |
+| created_at | DATETIME | Creation time |
+| updated_at | DATETIME | Update time |
 
-### sessions 表
+### sessions Table
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER | 主键，自增 |
-| session_id | TEXT | 会话 ID（唯一） |
-| user_id | INTEGER | 用户 ID（外键） |
-| username | TEXT | 用户名 |
-| created_at | DATETIME | 创建时间 |
-| expires_at | DATETIME | 过期时间 |
+| Field | Type | Description |
+|-------|------|-------------|
+| id | INTEGER | Primary key, auto-increment |
+| session_id | TEXT | Session ID (unique) |
+| user_id | INTEGER | User ID (foreign key) |
+| username | TEXT | Username |
+| created_at | DATETIME | Creation time |
+| expires_at | DATETIME | Expiration time |
 
-## 安全说明
+## Security Notes
 
-1. **密码加密**: 使用 bcrypt 进行密码哈希
-2. **Session 过期**: Session 默认 24 小时过期
-3. **Cookie 安全**: Session ID 存储在 HttpOnly Cookie 中
-4. **权限控制**: 用户管理功能仅管理员可访问
+1. **Password Encryption**: Uses bcrypt for password hashing
+2. **Session Expiration**: Sessions expire after 24 hours by default
+3. **Cookie Security**: Session ID is stored in HttpOnly Cookie
+4. **Permission Control**: User management features are only accessible to administrators
 
-## 注意事项
+## Notes
 
-1. 首次运行会自动创建默认管理员账户（admin/admin123）
-2. 如果数据库文件不存在，会自动创建
-3. 过期 session 会定期自动清理（每小时一次）
-4. 用户管理 UI 通过 `SetCustomScript` 注入，不会修改核心项目代码
+1. Default admin account (admin/admin123) will be automatically created on first run
+2. Database file will be automatically created if it doesn't exist
+3. Expired sessions are automatically cleaned up periodically (every hour)
+4. User management UI is injected via `SetCustomScript`, without modifying core project code
 

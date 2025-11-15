@@ -215,6 +215,9 @@ const i18n = {
             'theme.cyan': 'Cyan',
             'theme.red': 'Red',
             
+            // 系统设置
+            'settings.title': 'Settings',
+            
             // 用户管理
             'user.menu': 'User Menu',
             'user.changePassword': 'Change Password',
@@ -464,6 +467,9 @@ const i18n = {
             'theme.cyan': '青色',
             'theme.red': '红色',
             
+            // 系统设置
+            'settings.title': '系统设置',
+            
             // 用户管理
             'user.menu': '用户菜单',
             'user.changePassword': '修改密码',
@@ -712,6 +718,9 @@ const i18n = {
             'theme.orange': '橙色',
             'theme.cyan': '青色',
             'theme.red': '紅色',
+            
+            // 系统设置
+            'settings.title': '系統設置',
             
             // 用户管理
             'user.menu': '用戶選單',

@@ -33,20 +33,22 @@
         const userMenu = document.createElement('div');
         userMenu.style.cssText = 'margin-left: auto; display: flex; align-items: center; gap: 1rem; position: relative; flex-shrink: 0;';
 
-        // 用户名显示
+        // 用户名显示（可点击）
         const usernameSpan = document.createElement('span');
         usernameSpan.textContent = currentUser.username;
-        usernameSpan.style.cssText = 'color: var(--text-primary); font-size: 0.875rem; white-space: nowrap;';
+        usernameSpan.style.cssText = 'color: var(--text-primary); font-size: 0.875rem; white-space: nowrap; cursor: pointer; padding: 0.5rem; border-radius: 4px; transition: background 0.2s; user-select: none;';
         if (currentUser.is_admin) {
             usernameSpan.textContent += ' (' + t('user.admin') + ')';
             usernameSpan.style.color = 'var(--primary-color)';
         }
-
-        // 用户菜单按钮
-        const menuButton = document.createElement('button');
-        menuButton.textContent = '⚙️';
-        menuButton.style.cssText = 'background: var(--surface); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.5rem; cursor: pointer; color: var(--text-primary); flex-shrink: 0;';
-        menuButton.title = t('user.menu');
+        
+        // 添加悬停效果
+        usernameSpan.addEventListener('mouseenter', () => {
+            usernameSpan.style.background = 'var(--surface-light)';
+        });
+        usernameSpan.addEventListener('mouseleave', () => {
+            usernameSpan.style.background = 'transparent';
+        });
 
         // 下拉菜单
         const dropdown = document.createElement('div');
@@ -54,12 +56,14 @@
         
         const menuItems = [
             { text: t('user.changePassword'), key: 'user.changePassword', action: showChangePasswordModal },
-            { text: t('user.logout'), key: 'user.logout', action: handleLogout, style: 'color: var(--danger-color);' }
+            { text: t('settings.title'), key: 'settings.title', action: showSettingsModal }
         ];
 
         if (currentUser.is_admin) {
             menuItems.splice(1, 0, { text: t('user.management'), key: 'user.management', action: showUserManagementModal });
         }
+        
+        menuItems.push({ text: t('user.logout'), key: 'user.logout', action: handleLogout, style: 'color: var(--danger-color);' });
 
         menuItems.forEach(item => {
             const menuItem = document.createElement('div');
@@ -96,7 +100,8 @@
         };
         window.addEventListener('languageChanged', languageChangeHandler);
 
-        menuButton.addEventListener('click', (e) => {
+        // 点击用户名显示/隐藏下拉菜单
+        usernameSpan.addEventListener('click', (e) => {
             e.stopPropagation();
             dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
         });
@@ -108,9 +113,27 @@
         });
 
         userMenu.appendChild(usernameSpan);
-        userMenu.appendChild(menuButton);
         userMenu.appendChild(dropdown);
         headerContent.appendChild(userMenu);
+        
+        // 覆盖 header 样式
+        const header = document.querySelector('.header');
+        if (header) {
+            header.style.padding = '0.5rem 2rem';
+        }
+        
+        // 隐藏 header 中的主题和语言选择器
+        const themeSelect = document.getElementById('themeSelect');
+        const languageSelect = document.getElementById('languageSelect');
+        if (themeSelect && themeSelect.parentElement) {
+            themeSelect.parentElement.style.display = 'none';
+        }
+        if (languageSelect && languageSelect.parentElement) {
+            // 如果主题选择器已经被隐藏，整个容器可能已经隐藏，否则单独隐藏语言选择器
+            if (themeSelect && themeSelect.parentElement && themeSelect.parentElement.style.display !== 'none') {
+                languageSelect.style.display = 'none';
+            }
+        }
 
         // 修改密码模态框
         function showChangePasswordModal() {
@@ -370,14 +393,181 @@
                 });
         }
 
+        // 系统设置模态框
+        function showSettingsModal() {
+            // 获取当前主题和语言
+            const currentTheme = typeof window.themeManager !== 'undefined' && window.themeManager.currentTheme 
+                ? window.themeManager.currentTheme 
+                : 'yellow';
+            const currentLang = typeof window.i18n !== 'undefined' && window.i18n.currentLang 
+                ? window.i18n.currentLang 
+                : 'zh-CN';
+            
+            // 构建主题选项
+            const themeOptions = [
+                { value: 'yellow', icon: '🟡', label: t('theme.yellow') || 'Yellow' },
+                { value: 'blue', icon: '🔵', label: t('theme.blue') || 'Blue' },
+                { value: 'green', icon: '🟢', label: t('theme.green') || 'Green' },
+                { value: 'purple', icon: '🟣', label: t('theme.purple') || 'Purple' },
+                { value: 'orange', icon: '🟠', label: t('theme.orange') || 'Orange' },
+                { value: 'cyan', icon: '🔷', label: t('theme.cyan') || 'Cyan' },
+                { value: 'red', icon: '🔴', label: t('theme.red') || 'Red' }
+            ];
+            
+            const themeOptionsHTML = themeOptions.map(theme => 
+                `<option value="${theme.value}" ${theme.value === currentTheme ? 'selected' : ''}>${theme.icon} ${escapeHtml(theme.label)}</option>`
+            ).join('');
+            
+            // 构建语言选项
+            const langOptions = [
+                { value: 'en', label: t('lang.en') || 'English' },
+                { value: 'zh-CN', label: t('lang.zh-CN') || '简体中文' },
+                { value: 'zh-TW', label: t('lang.zh-TW') || '繁體中文' }
+            ];
+            
+            const langOptionsHTML = langOptions.map(lang => 
+                `<option value="${lang.value}" ${lang.value === currentLang ? 'selected' : ''}>${escapeHtml(lang.label)}</option>`
+            ).join('');
+            
+            const modal = createModal(t('settings.title'), 
+                '<div style="margin-bottom: 1.5rem;">' +
+                    '<label style="display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">' + (t('theme.switch') || '主题') + '</label>' +
+                    '<select id="settingsThemeSelect" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface); color: var(--text-primary); font-size: 0.875rem;">' +
+                        themeOptionsHTML +
+                    '</select>' +
+                '</div>' +
+                '<div style="margin-bottom: 1.5rem;">' +
+                    '<label style="display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">' + (t('lang.switch') || '语言') + '</label>' +
+                    '<select id="settingsLanguageSelect" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface); color: var(--text-primary); font-size: 0.875rem;">' +
+                        langOptionsHTML +
+                    '</select>' +
+                '</div>' +
+                '<div style="display: flex; gap: 0.5rem; justify-content: flex-end;">' +
+                    '<button id="cancelSettingsBtn" class="btn btn-secondary">' + t('common.cancel') + '</button>' +
+                    '<button id="saveSettingsBtn" class="btn btn-primary">' + t('common.save') + '</button>' +
+                '</div>'
+            );
+
+            // 主题切换
+            const themeSelect = document.getElementById('settingsThemeSelect');
+            themeSelect.addEventListener('change', (e) => {
+                if (typeof window.themeManager !== 'undefined' && window.themeManager.setTheme) {
+                    window.themeManager.setTheme(e.target.value);
+                }
+            });
+
+            // 语言切换
+            const languageSelect = document.getElementById('settingsLanguageSelect');
+            languageSelect.addEventListener('change', (e) => {
+                if (typeof window.i18n !== 'undefined' && window.i18n.setLanguage) {
+                    window.i18n.setLanguage(e.target.value);
+                    if (typeof window.updateI18nElements === 'function') {
+                        window.updateI18nElements();
+                    }
+                    // 触发语言变化事件
+                    window.dispatchEvent(new Event('languageChanged'));
+                    // 更新设置弹框中的选项文本（因为语言改变了）
+                    updateSettingsModalText(modal);
+                }
+            });
+
+            // 保存按钮（实际上主题和语言已经实时切换了，这里只是关闭弹框）
+            document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+                closeModal(modal);
+            });
+
+            // 取消按钮
+            document.getElementById('cancelSettingsBtn').addEventListener('click', () => {
+                closeModal(modal);
+            });
+            
+            // 保存 modal 引用以便更新文本
+            modal._settingsModal = true;
+        }
+        
+        // 更新设置弹框中的文本（语言切换后）
+        function updateSettingsModalText(modal) {
+            if (!modal || !modal._settingsModal) return;
+            
+            // 更新标题
+            const title = modal.querySelector('h2');
+            if (title) {
+                title.textContent = t('settings.title');
+            }
+            
+            // 更新标签（通过查找包含 select 的 div 的前一个 label）
+            const settingsThemeSelect = document.getElementById('settingsThemeSelect');
+            if (settingsThemeSelect && settingsThemeSelect.parentElement) {
+                const themeLabel = settingsThemeSelect.parentElement.querySelector('label');
+                if (themeLabel) {
+                    themeLabel.textContent = t('theme.switch') || '主题';
+                }
+            }
+            
+            const settingsLanguageSelect = document.getElementById('settingsLanguageSelect');
+            if (settingsLanguageSelect && settingsLanguageSelect.parentElement) {
+                const langLabel = settingsLanguageSelect.parentElement.querySelector('label');
+                if (langLabel) {
+                    langLabel.textContent = t('lang.switch') || '语言';
+                }
+            }
+            
+            // 更新按钮文本
+            const cancelBtn = document.getElementById('cancelSettingsBtn');
+            const saveBtn = document.getElementById('saveSettingsBtn');
+            if (cancelBtn) cancelBtn.textContent = t('common.cancel');
+            if (saveBtn) saveBtn.textContent = t('common.save');
+            
+            // 更新主题选项文本
+            if (settingsThemeSelect) {
+                const currentValue = settingsThemeSelect.value;
+                const themes = {
+                    yellow: { icon: '🟡', label: t('theme.yellow') || 'Yellow' },
+                    blue: { icon: '🔵', label: t('theme.blue') || 'Blue' },
+                    green: { icon: '🟢', label: t('theme.green') || 'Green' },
+                    purple: { icon: '🟣', label: t('theme.purple') || 'Purple' },
+                    orange: { icon: '🟠', label: t('theme.orange') || 'Orange' },
+                    cyan: { icon: '🔷', label: t('theme.cyan') || 'Cyan' },
+                    red: { icon: '🔴', label: t('theme.red') || 'Red' }
+                };
+                settingsThemeSelect.querySelectorAll('option').forEach(option => {
+                    const theme = themes[option.value];
+                    if (theme) {
+                        option.textContent = `${theme.icon} ${escapeHtml(theme.label)}`;
+                    }
+                });
+                settingsThemeSelect.value = currentValue;
+            }
+            
+            // 更新语言选项文本
+            if (settingsLanguageSelect) {
+                const currentValue = settingsLanguageSelect.value;
+                const langs = {
+                    'en': t('lang.en') || 'English',
+                    'zh-CN': t('lang.zh-CN') || '简体中文',
+                    'zh-TW': t('lang.zh-TW') || '繁體中文'
+                };
+                settingsLanguageSelect.querySelectorAll('option').forEach(option => {
+                    const lang = langs[option.value];
+                    if (lang) {
+                        option.textContent = escapeHtml(lang);
+                    }
+                });
+                settingsLanguageSelect.value = currentValue;
+            }
+        }
+
         function handleLogout() {
             fetch('/api/auth/logout', { method: 'POST' })
                 .then(() => {
-                    window.location.href = '/login';
+                    // 获取路由前缀（如果有）
+                    const routePrefix = window.location.pathname.split('/').slice(0, -1).join('/') || '';
+                    window.location.href = routePrefix + '/login';
                 })
                 .catch(err => {
                     console.error('Logout error:', err);
-                    window.location.href = '/login';
+                    const routePrefix = window.location.pathname.split('/').slice(0, -1).join('/') || '';
+                    window.location.href = routePrefix + '/login';
                 });
         }
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // SQLite3 实现Database接口
@@ -20,7 +20,7 @@ func NewSQLite3() *SQLite3 {
 
 // Connect 建立SQLite3连接
 func (s *SQLite3) Connect(dsn string) error {
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database connection: %w", err)
 	}

@@ -108,10 +108,10 @@ build-linux:
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Commit: $(COMMIT)"
 	@mkdir -p $(BUILD_DIR)
-	@echo "  -> Linux amd64..."
-	@GOOS=linux GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
-	@echo "  -> Linux arm64..."
-	@GOOS=linux GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 .
+	@echo "  -> Linux amd64 (static, no CGO)..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -tags netgo -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
+	@echo "  -> Linux arm64 (static, no CGO)..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -tags netgo -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 .
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-*"
 
 # 构建 Windows 平台 (amd64, arm64)
@@ -121,10 +121,10 @@ build-windows:
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Commit: $(COMMIT)"
 	@mkdir -p $(BUILD_DIR)
-	@echo "  -> Windows amd64..."
-	@GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
-	@echo "  -> Windows arm64..."
-	@GOOS=windows GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-arm64.exe .
+	@echo "  -> Windows amd64 (static, no CGO)..."
+	@CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -tags netgo -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
+	@echo "  -> Windows arm64 (static, no CGO)..."
+	@CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -tags netgo -o $(BUILD_DIR)/$(BINARY_NAME)-windows-arm64.exe .
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-windows-*.exe"
 
 # 构建 macOS 平台 (amd64, arm64)
@@ -134,10 +134,10 @@ build-darwin:
 	@echo "Build Time: $(BUILD_TIME)"
 	@echo "Commit: $(COMMIT)"
 	@mkdir -p $(BUILD_DIR)
-	@echo "  -> macOS amd64..."
-	@GOOS=darwin GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
-	@echo "  -> macOS arm64..."
-	@GOOS=darwin GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 .
+	@echo "  -> macOS amd64 (static, no CGO)..."
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -tags netgo -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	@echo "  -> macOS arm64 (static, no CGO)..."
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -tags netgo -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 .
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-darwin-*"
 
 # 构建所有平台

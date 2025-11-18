@@ -87,6 +87,7 @@ const i18n = {
             'data.perPage': 'Per Page:',
             'data.total': 'Total {total} records, Page {page}/{totalPages}',
             'data.clickhouseNoPagination': 'Showing first 10 records (ClickHouse does not support pagination)',
+            'data.redisNoPagination': 'Showing current page data (Redis does not support pagination)',
             'data.prevPage': 'Previous',
             'data.nextPage': 'Next',
             'data.copySchema': 'Copy',
@@ -329,6 +330,7 @@ const i18n = {
             'data.perPage': '每页:',
             'data.total': '共 {total} 条，第 {page}/{totalPages} 页',
             'data.clickhouseNoPagination': '显示前 10 条数据（ClickHouse 不支持分页）',
+            'data.redisNoPagination': '显示当前页数据（Redis 不支持分页）',
             'data.prevPage': '上一页',
             'data.nextPage': '下一页',
             'data.copySchema': '复制',
@@ -581,6 +583,7 @@ const i18n = {
             'data.perPage': '每頁:',
             'data.total': '共 {total} 筆，第 {page}/{totalPages} 頁',
             'data.clickhouseNoPagination': '顯示前 10 筆資料（ClickHouse 不支援分頁）',
+            'data.redisNoPagination': '顯示當前頁資料（Redis 不支援分頁）',
             'data.prevPage': '上一頁',
             'data.nextPage': '下一頁',
             'data.copySchema': '複製',
@@ -1528,6 +1531,61 @@ function updateFormForDbType(dbType) {
         if (useProxy && useProxy.parentElement) {
             useProxy.parentElement.style.display = 'none';
         }
+    } else if (dbType === 'redis') {
+        // Redis: 显示正常表单，但用户名为可选
+        if (sqliteFileGroup) sqliteFileGroup.style.display = 'none';
+        if (normalFormGroup) normalFormGroup.style.display = 'block';
+        if (connectionMode) connectionMode.style.display = 'block';
+        // 显示代理配置
+        if (useProxy && useProxy.parentElement) {
+            useProxy.parentElement.style.display = 'block';
+        }
+        // 将用户名字段标记为可选（添加可选提示）
+        const userInput = document.getElementById('user');
+        if (userInput) {
+            userInput.placeholder = 'root (可选)';
+            // 查找用户名字段的 label（通过查找包含"用户名"文本的 label）
+            const labels = document.querySelectorAll('label');
+            let userLabel = null;
+            for (let label of labels) {
+                if (label.getAttribute('for') === 'user' || label.nextElementSibling === userInput || (label.textContent.includes('用户名') && label.nextElementSibling && label.nextElementSibling.id === 'user')) {
+                    userLabel = label;
+                    break;
+                }
+            }
+            if (userLabel && !userLabel.querySelector('.optional-hint')) {
+                const hint = document.createElement('span');
+                hint.className = 'optional-hint';
+                hint.style.cssText = 'color: var(--text-secondary); font-size: 0.75rem; font-weight: normal; margin-left: 0.25rem;';
+                hint.textContent = '(可选)';
+                userLabel.appendChild(hint);
+            }
+        }
+        // 将密码字段也标记为可选（Redis 密码也是可选的）
+        const passwordInput = document.getElementById('password');
+        if (passwordInput) {
+            passwordInput.placeholder = 'password (可选)';
+            // 查找密码字段的 label
+            const labels = document.querySelectorAll('label');
+            let passwordLabel = null;
+            for (let label of labels) {
+                // 查找包含"密码"文本的 label，且下一个元素是包含 password 输入框的 div
+                if (label.textContent.includes('密码') && label.nextElementSibling) {
+                    const nextEl = label.nextElementSibling;
+                    if (nextEl.querySelector && nextEl.querySelector('#password')) {
+                        passwordLabel = label;
+                        break;
+                    }
+                }
+            }
+            if (passwordLabel && !passwordLabel.querySelector('.optional-hint')) {
+                const hint = document.createElement('span');
+                hint.className = 'optional-hint';
+                hint.style.cssText = 'color: var(--text-secondary); font-size: 0.75rem; font-weight: normal; margin-left: 0.25rem;';
+                hint.textContent = '(可选)';
+                passwordLabel.appendChild(hint);
+            }
+        }
     } else {
         // 其他数据库: 显示正常表单
         if (sqliteFileGroup) sqliteFileGroup.style.display = 'none';
@@ -1536,6 +1594,41 @@ function updateFormForDbType(dbType) {
         // 显示代理配置
         if (useProxy && useProxy.parentElement) {
             useProxy.parentElement.style.display = 'block';
+        }
+        // 移除 Redis 的可选提示（如果存在）
+        const userInput = document.getElementById('user');
+        if (userInput) {
+            userInput.placeholder = 'root';
+            // 查找用户名字段的 label
+            const labels = document.querySelectorAll('label');
+            for (let label of labels) {
+                if (label.getAttribute('for') === 'user' || label.nextElementSibling === userInput || (label.textContent.includes('用户名') && label.nextElementSibling && label.nextElementSibling.id === 'user')) {
+                    const hint = label.querySelector('.optional-hint');
+                    if (hint) {
+                        hint.remove();
+                    }
+                    break;
+                }
+            }
+        }
+        // 移除密码字段的可选提示（如果存在）
+        const passwordInput = document.getElementById('password');
+        if (passwordInput) {
+            passwordInput.placeholder = 'password';
+            // 查找密码字段的 label
+            const labels = document.querySelectorAll('label');
+            for (let label of labels) {
+                if (label.textContent.includes('密码') && label.nextElementSibling) {
+                    const nextEl = label.nextElementSibling;
+                    if (nextEl.querySelector && nextEl.querySelector('#password')) {
+                        const hint = label.querySelector('.optional-hint');
+                        if (hint) {
+                            hint.remove();
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
 }
@@ -1712,11 +1805,24 @@ function loadSavedConnections() {
             // DSN 模式
             const userMatch = conn.dsn.match(/^([^:]+):/);
             const hostMatch = conn.dsn.match(/@tcp\(([^:]+)/);
-            const user = userMatch ? userMatch[1] : 'unknown';
+            const user = userMatch ? userMatch[1] : '';
             const host = hostMatch ? hostMatch[1] : 'unknown';
-            displayText = `${conn.type || 'mysql'}://${user}@${host}`;
+            // Redis 允许没有用户名，如果用户名为空则不显示
+            if (conn.type === 'redis' && !user) {
+                displayText = `${conn.type || 'mysql'}://${host}`;
         } else {
-            displayText = `${conn.type || 'mysql'}://${conn.user || 'unknown'}@${conn.host || 'unknown'}:${conn.port || '3306'}`;
+                const displayUser = user || 'unknown';
+                displayText = `${conn.type || 'mysql'}://${displayUser}@${host}`;
+            }
+        } else {
+            const user = conn.user || '';
+            // Redis 允许没有用户名，如果用户名为空则不显示
+            if (conn.type === 'redis' && !user) {
+                displayText = `${conn.type || 'mysql'}://${conn.host || 'unknown'}:${conn.port || '3306'}`;
+            } else {
+                const displayUser = user || 'unknown';
+                displayText = `${conn.type || 'mysql'}://${displayUser}@${conn.host || 'unknown'}:${conn.port || '3306'}`;
+            }
             }
         }
         
@@ -2133,6 +2239,61 @@ function updateEditFormForDbType(dbType) {
         if (editUseProxy && editUseProxy.parentElement) {
             editUseProxy.parentElement.style.display = 'none';
         }
+    } else if (dbType === 'redis') {
+        // Redis: 显示正常表单，但用户名为可选
+        if (editSqliteFileGroup) editSqliteFileGroup.style.display = 'none';
+        if (editNormalFormGroup) editNormalFormGroup.style.display = 'block';
+        if (editConnectionMode) editConnectionMode.style.display = 'block';
+        // 显示代理配置
+        if (editUseProxy && editUseProxy.parentElement) {
+            editUseProxy.parentElement.style.display = 'block';
+        }
+        // 将用户名字段标记为可选（添加可选提示）
+        const userInput = document.getElementById('editUser');
+        if (userInput) {
+            userInput.placeholder = 'root (可选)';
+            // 查找用户名字段的 label（通过查找包含"用户名"文本的 label）
+            const labels = document.querySelectorAll('label');
+            let userLabel = null;
+            for (let label of labels) {
+                if (label.getAttribute('for') === 'editUser' || label.nextElementSibling === userInput || (label.textContent.includes('用户名') && label.nextElementSibling && label.nextElementSibling.id === 'editUser')) {
+                    userLabel = label;
+                    break;
+                }
+            }
+            if (userLabel && !userLabel.querySelector('.optional-hint')) {
+                const hint = document.createElement('span');
+                hint.className = 'optional-hint';
+                hint.style.cssText = 'color: var(--text-secondary); font-size: 0.75rem; font-weight: normal; margin-left: 0.25rem;';
+                hint.textContent = '(可选)';
+                userLabel.appendChild(hint);
+            }
+        }
+        // 将密码字段也标记为可选（Redis 密码也是可选的）
+        const passwordInput = document.getElementById('editPassword');
+        if (passwordInput) {
+            passwordInput.placeholder = 'password (可选)';
+            // 查找密码字段的 label
+            const labels = document.querySelectorAll('label');
+            let passwordLabel = null;
+            for (let label of labels) {
+                // 查找包含"密码"文本的 label，且下一个元素是包含 password 输入框的 div
+                if (label.textContent.includes('密码') && label.nextElementSibling) {
+                    const nextEl = label.nextElementSibling;
+                    if (nextEl.querySelector && nextEl.querySelector('#editPassword')) {
+                        passwordLabel = label;
+                        break;
+                    }
+                }
+            }
+            if (passwordLabel && !passwordLabel.querySelector('.optional-hint')) {
+                const hint = document.createElement('span');
+                hint.className = 'optional-hint';
+                hint.style.cssText = 'color: var(--text-secondary); font-size: 0.75rem; font-weight: normal; margin-left: 0.25rem;';
+                hint.textContent = '(可选)';
+                passwordLabel.appendChild(hint);
+            }
+        }
     } else {
         // 其他数据库: 显示正常表单
         if (editSqliteFileGroup) editSqliteFileGroup.style.display = 'none';
@@ -2141,6 +2302,41 @@ function updateEditFormForDbType(dbType) {
         // 显示代理配置
         if (editUseProxy && editUseProxy.parentElement) {
             editUseProxy.parentElement.style.display = 'block';
+        }
+        // 移除 Redis 的可选提示（如果存在）
+        const userInput = document.getElementById('editUser');
+        if (userInput) {
+            userInput.placeholder = 'root';
+            // 查找用户名字段的 label
+            const labels = document.querySelectorAll('label');
+            for (let label of labels) {
+                if (label.getAttribute('for') === 'editUser' || label.nextElementSibling === userInput || (label.textContent.includes('用户名') && label.nextElementSibling && label.nextElementSibling.id === 'editUser')) {
+                    const hint = label.querySelector('.optional-hint');
+                    if (hint) {
+                        hint.remove();
+                    }
+                    break;
+                }
+            }
+        }
+        // 移除密码字段的可选提示（如果存在）
+        const passwordInput = document.getElementById('editPassword');
+        if (passwordInput) {
+            passwordInput.placeholder = 'password';
+            // 查找密码字段的 label
+            const labels = document.querySelectorAll('label');
+            for (let label of labels) {
+                if (label.textContent.includes('密码') && label.nextElementSibling) {
+                    const nextEl = label.nextElementSibling;
+                    if (nextEl.querySelector && nextEl.querySelector('#editPassword')) {
+                        const hint = label.querySelector('.optional-hint');
+                        if (hint) {
+                            hint.remove();
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
 }
@@ -2335,13 +2531,19 @@ async function handleSaveEditConnection(connectAfterSave) {
     } else {
         const hostValue = editHost ? editHost.value : '';
         const userValue = editUser ? editUser.value : '';
-        if (!hostValue || !userValue) {
+        // Redis 允许不设置用户名
+        if (!hostValue) {
+            showNotification(t('error.fillHostUser'), 'error');
+            return;
+        }
+        if (dbType !== 'redis' && !userValue) {
             showNotification(t('error.fillHostUser'), 'error');
             return;
         }
         connectionInfo.host = hostValue;
         connectionInfo.port = editPort ? (editPort.value || '3306') : '3306';
-        connectionInfo.user = userValue;
+        // Redis 允许用户名为空
+        connectionInfo.user = userValue || '';
         // 数据库密码（先不加密，后面统一处理）
         const dbPassword = editPassword ? editPassword.value : '';
         connectionInfo.password = dbPassword || '';
@@ -2559,16 +2761,16 @@ function updateDatabaseTypeSelect() {
     
     // 更新新增连接的数据库类型选择框
     if (dbTypeSelect) {
-        // 清空现有选项
-        dbTypeSelect.innerHTML = '';
-        
-        // 添加数据库类型选项
-        databaseTypes.forEach(dbType => {
-            const option = document.createElement('option');
-            option.value = dbType.type;
-            option.textContent = dbType.display_name;
-            dbTypeSelect.appendChild(option);
-        });
+    // 清空现有选项
+    dbTypeSelect.innerHTML = '';
+    
+    // 添加数据库类型选项
+    databaseTypes.forEach(dbType => {
+        const option = document.createElement('option');
+        option.value = dbType.type;
+        option.textContent = dbType.display_name;
+        dbTypeSelect.appendChild(option);
+    });
     }
     
     // 更新编辑连接的数据库类型选择框
@@ -3205,13 +3407,19 @@ async function handleConnect() {
     } else {
         const hostInput = document.getElementById('host');
         const userInput = document.getElementById('user');
-        if (!hostInput || !hostInput.value || !userInput || !userInput.value) {
+        // Redis 允许不设置用户名
+        if (!hostInput || !hostInput.value) {
+            showNotification(t('error.fillHostUser'), 'error');
+            return;
+        }
+        if (dbType !== 'redis' && (!userInput || !userInput.value)) {
             showNotification(t('error.fillHostUser'), 'error');
             return;
         }
         connectionInfo.host = hostInput.value;
         connectionInfo.port = document.getElementById('port') ? (document.getElementById('port').value || '3306') : '3306';
-        connectionInfo.user = userInput.value;
+        // Redis 允许用户名为空
+        connectionInfo.user = userInput ? (userInput.value || '') : '';
         // 加密数据库密码（如果提供了）
         const dbPassword = document.getElementById('password') ? document.getElementById('password').value : '';
         connectionInfo.password = dbPassword ? encryptPassword(dbPassword) : '';
@@ -3402,11 +3610,24 @@ function updateActiveConnectionsList() {
             } else if (info.dsn) {
                 const userMatch = info.dsn.match(/^([^:]+):/);
                 const hostMatch = info.dsn.match(/@tcp\(([^:]+)/);
-                const user = userMatch ? userMatch[1] : 'unknown';
+                const user = userMatch ? userMatch[1] : '';
                 const host = hostMatch ? hostMatch[1] : 'unknown';
-                displayText = `${info.type || 'mysql'}://${user}@${host}`;
+                // Redis 允许没有用户名，如果用户名为空则不显示
+                if (info.type === 'redis' && !user) {
+                    displayText = `${info.type || 'mysql'}://${host}`;
+                } else {
+                    const displayUser = user || 'unknown';
+                    displayText = `${info.type || 'mysql'}://${displayUser}@${host}`;
+                }
             } else {
-                displayText = `${info.type || 'mysql'}://${info.user || 'unknown'}@${info.host || 'unknown'}:${info.port || '3306'}`;
+                const user = info.user || '';
+                // Redis 允许没有用户名，如果用户名为空则不显示
+                if (info.type === 'redis' && !user) {
+                    displayText = `${info.type || 'mysql'}://${info.host || 'unknown'}:${info.port || '3306'}`;
+                } else {
+                    const displayUser = user || 'unknown';
+                    displayText = `${info.type || 'mysql'}://${displayUser}@${info.host || 'unknown'}:${info.port || '3306'}`;
+                }
             }
         }
         
@@ -3581,16 +3802,28 @@ function updateConnectionInfo(info) {
         const userMatch = info.dsn.match(/^([^:]+):/);
         const hostMatch = info.dsn.match(/@tcp\(([^:]+)/);
         const portMatch = info.dsn.match(/@tcp\([^:]+:(\d+)/);
-        const user = userMatch ? userMatch[1] : 'unknown';
+        const user = userMatch ? userMatch[1] : '';
         const host = hostMatch ? hostMatch[1] : 'unknown';
         const port = portMatch ? portMatch[1] : '3306';
-        infoText = `${dbTypeName}://${user}@${host}:${port}`;
+        // Redis 允许没有用户名，如果用户名为空则不显示
+        if (info.type === 'redis' && !user) {
+            infoText = `${dbTypeName}://${host}:${port}`;
+        } else {
+            const displayUser = user || 'unknown';
+            infoText = `${dbTypeName}://${displayUser}@${host}:${port}`;
+        }
     } else {
         // 表单模式
         const host = info.host || 'localhost';
         const port = info.port || '3306';
-        const user = info.user || 'unknown';
-        infoText = `${dbTypeName}://${user}@${host}:${port}`;
+        const user = info.user || '';
+        // Redis 允许没有用户名，如果用户名为空则不显示
+        if (info.type === 'redis' && !user) {
+            infoText = `${dbTypeName}://${host}:${port}`;
+        } else {
+            const displayUser = user || 'unknown';
+            infoText = `${dbTypeName}://${displayUser}@${host}:${port}`;
+        }
         }
     }
     
@@ -4073,8 +4306,12 @@ async function loadTableData() {
             currentColumns = columnsData.columns.map(col => col.name);
         }
         
+        // Redis 不支持分页，固定使用第一页
+        const isRedis = currentDbType === 'redis';
+        const requestPage = isRedis ? 1 : currentPage;
+        
         // 构建请求URL
-        let url = `${API_BASE}/table/data?table=${currentTable}&page=${currentPage}&pageSize=${pageSize}`;
+        let url = `${API_BASE}/table/data?table=${currentTable}&page=${requestPage}&pageSize=${pageSize}`;
         
         // 添加过滤条件（如果有）
         if (currentFilters && currentFilters.conditions && currentFilters.conditions.length > 0) {
@@ -4113,8 +4350,9 @@ async function loadTableData() {
                 // 清空当前数据
                 currentTableData.rows = [];
                 currentTableData.total = 0;
-                currentTableData.isClickHouse = false;
-                displayTableData([], 0, false);
+                const isRedis = currentDbType === 'redis';
+                currentTableData.isClickHouse = isRedis; // 复用字段表示不支持分页
+                displayTableData([], 0, isRedis);
             }
             hideLoading(dataLoading);
             setButtonLoading(refreshData, false);
@@ -4181,19 +4419,24 @@ async function loadTableData() {
                 dataByColumns.push(rowByColumns);
             });
 
-            // 检查是否为 ClickHouse
+            // 检查是否为 ClickHouse 或 Redis（都不支持分页）
             const isClickHouse = data.isClickHouse || false;
+            const isRedis = currentDbType === 'redis';
+            const noPagination = isClickHouse || isRedis;
             
             // 保存当前数据（用于前端排序）
             currentTableData.rows = dataByColumns;
             currentTableData.total = data.total;
-            currentTableData.isClickHouse = isClickHouse;
+            currentTableData.isClickHouse = noPagination; // 复用 isClickHouse 字段表示不支持分页
             
-            displayTableData(dataByColumns, data.total, isClickHouse);
+            displayTableData(dataByColumns, data.total, noPagination);
             
             // 计算是否有下一页
             let hasNextPage = true;
-            if (useIdPagination) {
+            if (noPagination) {
+                // ClickHouse 和 Redis 不支持分页
+                hasNextPage = false;
+            } else if (useIdPagination) {
                 // 基于ID分页：使用后端返回的hasNextPage
                 hasNextPage = data.hasNextPage !== false;
             } else {
@@ -4202,7 +4445,7 @@ async function loadTableData() {
                 hasNextPage = data.page < totalPages;
             }
             
-            updatePagination(data.total, data.page, data.pageSize, isClickHouse, useIdPagination, hasNextPage);
+            updatePagination(data.total, data.page, data.pageSize, noPagination, useIdPagination, hasNextPage);
             
             // 显示导出按钮并更新翻译
             if (exportDataBtn) {
@@ -4402,8 +4645,13 @@ function displayTableData(rows, total, isClickHouse = false) {
 // 更新分页
 function updatePagination(total, page, pageSize, isClickHouse = false, useIdPagination = false, hasNextPage = true) {
     if (isClickHouse) {
-        // ClickHouse 不支持分页，只显示提示信息
-        paginationInfo.textContent = t('data.clickhouseNoPagination');
+        // ClickHouse 和 Redis 不支持分页，只显示提示信息
+        const isRedis = currentDbType === 'redis';
+        if (isRedis) {
+            paginationInfo.textContent = t('data.redisNoPagination') || '显示当前页数据（Redis 不支持分页）';
+        } else {
+            paginationInfo.textContent = t('data.clickhouseNoPagination');
+        }
         pagination.innerHTML = '';
         return;
     }

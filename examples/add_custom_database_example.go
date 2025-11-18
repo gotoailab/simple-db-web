@@ -65,6 +65,9 @@ func main() {
 	server.AddDatabase(func() database.Database {
 		return database.NewMongoDB()
 	})
+	server.AddDatabase(func() database.Database {
+		return database.NewRedis()
+	})
 
 	presetConns := []database.ConnectionInfo{
 		{

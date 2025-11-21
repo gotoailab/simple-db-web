@@ -4,7 +4,7 @@
 
 在线体验demo: https://simpledbweb.go-admin.com
 
-<img src="https://raw.githubusercontent.com/chenhg5/simple-db-web/refs/heads/master/docs/images/demo.png" width="800">
+<img src="https://raw.githubusercontent.com/gotoailab/simple-db-web/refs/heads/master/docs/images/demo.png" width="800">
 
 ## 功能特性
 

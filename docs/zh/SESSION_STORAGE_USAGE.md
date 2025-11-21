@@ -60,7 +60,7 @@ server, err := handlers.NewServer()
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "github.com/redis/go-redis/v9"
 )
 
@@ -114,7 +114,7 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
 )
 
 // 实现MySQLSessionStorage（参考examples/mysql_session_storage.go）

@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/chenhg5/simple-db-web/database"
+	"github.com/gotoailab/simple-db-web/database"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -69,7 +69,7 @@ func NewSSHProxy(config string) (Proxy, error) {
 
 	// 认证方式：优先使用密钥，其次使用密码
 	var authMethods []ssh.AuthMethod
-	
+
 	if proxyConfig.KeyData != "" {
 		// 使用提供的密钥数据（已经是解密后的原始私钥内容）
 		signer, err := ssh.ParsePrivateKey([]byte(proxyConfig.KeyData))
@@ -78,16 +78,16 @@ func NewSSHProxy(config string) (Proxy, error) {
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
 	}
-	
+
 	if proxyConfig.Password != "" {
 		// 使用密码认证（已经是解密后的原始密码）
 		authMethods = append(authMethods, ssh.Password(proxyConfig.Password))
 	}
-	
+
 	if len(authMethods) == 0 {
 		return nil, fmt.Errorf("SSH代理需要提供密码或密钥")
 	}
-	
+
 	sshConfig.Auth = authMethods
 
 	// 连接到SSH服务器
@@ -136,21 +136,21 @@ func buildSSHProxyConfig(proxyConfig *database.ProxyConfig) (string, error) {
 		KeyFile:  proxyConfig.KeyFile,
 	}
 
-		// 如果提供了Config字段，尝试解析并合并
-		if proxyConfig.Config != "" {
-			var extraConfig map[string]interface{}
-			if err := json.Unmarshal([]byte(proxyConfig.Config), &extraConfig); err == nil {
-				// 合并额外配置
-				if keyData, ok := extraConfig["key_data"].(string); ok && keyData != "" {
-					// keyData 是加密后的，需要解密（使用 handlers 包中的 decryptPassword 函数）
-					decryptedKeyData, err := decryptPassword(keyData)
-					if err != nil {
-						return "", fmt.Errorf("解密SSH私钥失败: %w", err)
-					}
-					sshConfig.KeyData = decryptedKeyData
+	// 如果提供了Config字段，尝试解析并合并
+	if proxyConfig.Config != "" {
+		var extraConfig map[string]interface{}
+		if err := json.Unmarshal([]byte(proxyConfig.Config), &extraConfig); err == nil {
+			// 合并额外配置
+			if keyData, ok := extraConfig["key_data"].(string); ok && keyData != "" {
+				// keyData 是加密后的，需要解密（使用 handlers 包中的 decryptPassword 函数）
+				decryptedKeyData, err := decryptPassword(keyData)
+				if err != nil {
+					return "", fmt.Errorf("解密SSH私钥失败: %w", err)
 				}
+				sshConfig.KeyData = decryptedKeyData
 			}
 		}
+	}
 
 	configJSON, err := json.Marshal(sshConfig)
 	if err != nil {
@@ -159,4 +159,3 @@ func buildSSHProxyConfig(proxyConfig *database.ProxyConfig) (string, error) {
 
 	return string(configJSON), nil
 }
-

@@ -6,8 +6,8 @@ package main
 import (
 	"log"
 
-	"github.com/chenhg5/simple-db-web/handlers"
 	"github.com/gin-gonic/gin"
+	"github.com/gotoailab/simple-db-web/handlers"
 )
 
 // 这是一个使用自定义 Gin 引擎的示例

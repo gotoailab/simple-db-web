@@ -5,8 +5,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/chenhg5/simple-db-web/database"
 	mysqlDriver "github.com/go-sql-driver/mysql"
+	"github.com/gotoailab/simple-db-web/database"
 )
 
 var (
@@ -16,9 +16,9 @@ var (
 
 // ProxyDatabaseWrapper 包装Database接口，支持通过代理连接
 type ProxyDatabaseWrapper struct {
-	db    database.Database
-	proxy Proxy
-	netName string // 注册的网络类型名称
+	db         database.Database
+	proxy      Proxy
+	netName    string // 注册的网络类型名称
 	currentDSN string // 保存当前的DSN（包含代理网络类型）
 }
 
@@ -28,7 +28,7 @@ func NewProxyDatabaseWrapper(db database.Database, proxy Proxy) *ProxyDatabaseWr
 	defer proxyDialerMutex.Unlock()
 	proxyDialerCount++
 	netName := fmt.Sprintf("proxy_%d", proxyDialerCount)
-	
+
 	return &ProxyDatabaseWrapper{
 		db:      db,
 		proxy:   proxy,
@@ -59,7 +59,7 @@ func (p *ProxyDatabaseWrapper) Connect(dsn string) error {
 
 	// 重新构建DSN
 	newDSN := config.FormatDSN()
-	
+
 	// 保存当前DSN
 	p.currentDSN = newDSN
 
@@ -134,43 +134,43 @@ func (p *ProxyDatabaseWrapper) GetDatabases() ([]string, error) {
 func (p *ProxyDatabaseWrapper) SwitchDatabase(databaseName string) error {
 	// 需要保留代理的网络类型，所以不能直接调用内部的SwitchDatabase
 	// 需要手动处理：解析当前DSN，修改数据库名，但保留Net字段
-	
+
 	// 如果没有保存的DSN，尝试从内部数据库获取（通过反射或回退方案）
 	if p.currentDSN == "" {
 		// 回退方案：直接调用内部方法，但这样会丢失代理网络类型
 		// 更好的方案是：在Connect时已经保存了DSN，所以这里应该总是有值
 		return p.db.SwitchDatabase(databaseName)
 	}
-	
+
 	// 解析当前DSN（应该包含代理的网络类型）
 	config, err := mysqlDriver.ParseDSN(p.currentDSN)
 	if err != nil {
 		// 如果无法解析，回退到直接调用
 		return p.db.SwitchDatabase(databaseName)
 	}
-	
+
 	// 保存网络类型和地址
 	netType := config.Net
 	originalAddr := config.Addr
-	
+
 	// 修改数据库名
 	config.DBName = databaseName
-	
+
 	// 确保代理网络类型已注册
 	if netType != "" && netType != "tcp" {
 		mysqlDriver.RegisterDial(netType, func(addr string) (net.Conn, error) {
 			return p.proxy.Dial("tcp", addr)
 		})
 	}
-	
+
 	// 重新构建DSN（保留Net字段）
 	config.Net = netType
 	config.Addr = originalAddr
 	newDSN := config.FormatDSN()
-	
+
 	// 保存新的DSN
 	p.currentDSN = newDSN
-	
+
 	// 重新连接
 	return p.db.Connect(newDSN)
 }

@@ -11,9 +11,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/chenhg5/simple-db-web/database"
-	"github.com/chenhg5/simple-db-web/handlers"
 	"github.com/gin-gonic/gin"
+	"github.com/gotoailab/simple-db-web/database"
+	"github.com/gotoailab/simple-db-web/handlers"
 	"gopkg.in/yaml.v3"
 )
 

@@ -6,7 +6,7 @@ package main
 import (
 	"log"
 
-	"github.com/chenhg5/simple-db-web/handlers"
+	"github.com/gotoailab/simple-db-web/handlers"
 )
 
 // 这是一个使用 Gin 框架并添加路由前缀的示例

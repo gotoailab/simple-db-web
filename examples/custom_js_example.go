@@ -6,7 +6,7 @@ package main
 import (
 	"log"
 
-	"github.com/chenhg5/simple-db-web/handlers"
+	"github.com/gotoailab/simple-db-web/handlers"
 )
 
 // 这是一个展示如何自定义JavaScript逻辑的示例
@@ -82,4 +82,3 @@ func main() {
 		log.Fatalf("启动服务器失败: %v", err)
 	}
 }
-

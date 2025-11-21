@@ -1,4 +1,4 @@
-module github.com/chenhg5/simple-db-web
+module github.com/gotoailab/simple-db-web
 
 go 1.23.10
 

@@ -29,7 +29,7 @@ type Router interface {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -62,7 +62,7 @@ go get -u github.com/gin-gonic/gin
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -91,7 +91,7 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "github.com/gin-gonic/gin"
     "log"
 )
@@ -142,7 +142,7 @@ go get -u github.com/labstack/echo/v4
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -259,7 +259,7 @@ If you need to add a prefix to all routes (e.g., `/v1`, `/api/v1`), you can use 
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -305,8 +305,8 @@ You can dynamically register custom database types through the `AddDatabase` met
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/database"
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/database"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 

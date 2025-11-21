@@ -17,7 +17,7 @@
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -46,7 +46,7 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -75,7 +75,7 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "github.com/gin-gonic/gin"
     "log"
 )
@@ -116,7 +116,7 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 

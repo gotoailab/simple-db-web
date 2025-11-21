@@ -1,4 +1,4 @@
-[[中文介绍]](https://github.com/chenhg5/simple-db-web/blob/main/README_CN.md)  |  [[Join Discord]](https://discord.gg/B3FwBSQq)
+[[中文介绍]](https://github.com/gotoailab/simple-db-web/blob/main/README_CN.md)  |  [[Join Discord]](https://discord.gg/B3FwBSQq)
 
 # SimpleDBWeb - Database Management Tool
 
@@ -6,7 +6,7 @@ A modern database management web tool implemented with Go and Go Template, suppo
 
 online demo: https://simpledbweb.go-admin.com
 
-<img src="https://raw.githubusercontent.com/chenhg5/simple-db-web/refs/heads/master/docs/images/demo.png" width="800">
+<img src="https://raw.githubusercontent.com/gotoailab/simple-db-web/refs/heads/master/docs/images/demo.png" width="800">
 
 ## Features
 
@@ -57,7 +57,7 @@ The server will start at `http://localhost:8080`.
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 

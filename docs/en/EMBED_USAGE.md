@@ -47,7 +47,7 @@ When other projects import this package via `go mod`:
 
 ```go
 import (
-	"github.com/chenhg5/simple-db-web/handlers"
+	"github.com/gotoailab/simple-db-web/handlers"
 )
 
 func main() {

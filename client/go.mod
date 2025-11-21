@@ -1,9 +1,9 @@
-module github.com/chenhg5/simple-db-web/client
+module github.com/gotoailab/simple-db-web/client
 
 go 1.23.10
 
 require (
-	github.com/chenhg5/simple-db-web v0.0.0
+	github.com/gotoailab/simple-db-web v0.0.0
 	github.com/gin-gonic/gin v1.11.0
 	golang.org/x/crypto v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -89,4 +89,4 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-replace github.com/chenhg5/simple-db-web => ../
+replace github.com/gotoailab/simple-db-web => ../

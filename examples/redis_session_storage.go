@@ -9,15 +9,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chenhg5/simple-db-web/handlers"
+	"github.com/gotoailab/simple-db-web/handlers"
 	"github.com/redis/go-redis/v9"
 )
 
 // RedisSessionStorage Redis会话存储实现
 // 适用于多实例部署，通过Redis共享会话数据
 type RedisSessionStorage struct {
-	client  *redis.Client
-	ctx     context.Context
+	client    *redis.Client
+	ctx       context.Context
 	keyPrefix string // Redis key前缀，默认为 "simpledb:session:"
 }
 
@@ -127,4 +127,3 @@ func main() {
 	server.RegisterRoutes(router)
 	router.Engine().Run(":8080")
 }
-

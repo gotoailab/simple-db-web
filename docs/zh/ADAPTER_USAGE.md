@@ -29,7 +29,7 @@ type Router interface {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -62,7 +62,7 @@ go get -u github.com/gin-gonic/gin
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -91,7 +91,7 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "github.com/gin-gonic/gin"
     "log"
 )
@@ -142,7 +142,7 @@ go get -u github.com/labstack/echo/v4
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -258,7 +258,7 @@ fiberRouter.App().Listen(":8080")
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 
@@ -304,8 +304,8 @@ func main() {
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/database"
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/database"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 

@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chenhg5/simple-db-web/handlers"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gotoailab/simple-db-web/handlers"
 )
 
 // MySQLSessionStorage MySQL会话存储实现
@@ -179,4 +179,3 @@ func main() {
 	server.RegisterRoutes(router)
 	router.Engine().Run(":8080")
 }
-

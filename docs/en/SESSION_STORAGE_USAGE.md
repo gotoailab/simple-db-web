@@ -60,7 +60,7 @@ Suitable for multi-instance deployment, sharing session data through Redis:
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "github.com/redis/go-redis/v9"
 )
 
@@ -114,7 +114,7 @@ Suitable for multi-instance deployment, sharing session data through MySQL:
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
 )
 
 // Implement MySQLSessionStorage (refer to examples/mysql_session_storage.go)

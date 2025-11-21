@@ -6,8 +6,8 @@ package main
 import (
 	"log"
 
-	"github.com/chenhg5/simple-db-web/database"
-	"github.com/chenhg5/simple-db-web/handlers"
+	"github.com/gotoailab/simple-db-web/database"
+	"github.com/gotoailab/simple-db-web/handlers"
 )
 
 // 这是一个添加自定义数据库类型的示例

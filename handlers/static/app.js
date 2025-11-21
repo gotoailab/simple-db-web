@@ -1458,9 +1458,9 @@ function updateGitHubLink() {
         // 判断是否为中文（简体或繁体）
         const isChinese = i18n.currentLang === 'zh-CN' || i18n.currentLang === 'zh-TW';
         if (isChinese) {
-            githubLink.href = 'https://github.com/chenhg5/simple-db-web/blob/main/README_CN.md';
+            githubLink.href = 'https://github.com/gotoailab/simple-db-web/blob/main/README_CN.md';
         } else {
-            githubLink.href = 'https://github.com/chenhg5/simple-db-web';
+            githubLink.href = 'https://github.com/gotoailab/simple-db-web';
         }
     }
 }

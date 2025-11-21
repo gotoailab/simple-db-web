@@ -55,7 +55,7 @@ go build -o dbweb
 package main
 
 import (
-    "github.com/chenhg5/simple-db-web/handlers"
+    "github.com/gotoailab/simple-db-web/handlers"
     "log"
 )
 

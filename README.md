@@ -4,6 +4,10 @@
 
 A modern database management web tool implemented with Go and Go Template, supporting multiple database types.
 
+online demo: https://simpledbweb.go-admin.com
+
+<img src="https://raw.githubusercontent.com/chenhg5/simple-db-web/refs/heads/master/docs/images/demo.png" width="800">
+
 ## Features
 
 - ✅ Establish database connections (supports DSN or form input)

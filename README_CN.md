@@ -2,6 +2,10 @@
 
 一个使用 Go 和 Go Template 实现的现代化数据库管理 Web 工具，支持多种数据库类型。
 
+在线体验demo: https://simpledbweb.go-admin.com
+
+<img src="https://raw.githubusercontent.com/chenhg5/simple-db-web/refs/heads/master/docs/images/demo.png" width="800">
+
 ## 功能特性
 
 - ✅ 建立数据库连接（支持 DSN 或表单输入）

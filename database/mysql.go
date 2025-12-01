@@ -458,6 +458,7 @@ func BuildDSN(info ConnectionInfo) string {
 	}
 
 	// MySQL DSN格式: user:password@tcp(host:port)/database
+	// 注意：MySQL驱动会自动处理密码中的特殊字符，不需要手动URL编码
 	// 如果Database为空,则不指定数据库,用于先连接到服务器
 	var dsn string
 	if info.Database != "" {

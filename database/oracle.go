@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 
 	_ "github.com/sijms/go-ora/v2"
@@ -476,21 +477,25 @@ func BuildOracleDSN(info ConnectionInfo) string {
 		return info.DSN
 	}
 
+	// 对用户名和密码进行URL编码，以支持特殊字符
+	encodedUser := url.QueryEscape(info.User)
+	encodedPassword := url.QueryEscape(info.Password)
+
 	// Oracle DSN格式: oracle://user:password@host:port/service_name
 	// 或者: oracle://user:password@host:port/sid
 	var dsn string
 	if info.Database != "" {
 		dsn = fmt.Sprintf("oracle://%s:%s@%s:%s/%s",
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 			info.Host,
 			info.Port,
 			info.Database,
 		)
 	} else {
 		dsn = fmt.Sprintf("oracle://%s:%s@%s:%s",
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 			info.Host,
 			info.Port,
 		)

@@ -739,9 +739,10 @@ func BuildElasticsearchDSN(info ConnectionInfo) string {
 
 	// 如果有用户名或密码，使用 URL 格式
 	if info.User != "" || info.Password != "" {
-		// URL 编码密码
+		// URL 编码用户名和密码
+		encodedUser := url.QueryEscape(info.User)
 		encodedPassword := url.QueryEscape(info.Password)
-		return fmt.Sprintf("%s://%s:%s@%s:%s", scheme, info.User, encodedPassword, host, port)
+		return fmt.Sprintf("%s://%s:%s@%s:%s", scheme, encodedUser, encodedPassword, host, port)
 	}
 
 	// 否则使用 host:port?scheme=http 格式

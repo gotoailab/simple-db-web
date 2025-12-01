@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 
 	_ "github.com/denisenkom/go-mssqldb"
@@ -494,13 +495,16 @@ func BuildSQLServerDSN(info ConnectionInfo) string {
 		return info.DSN
 	}
 
+	// 对密码进行URL编码，以支持特殊字符
+	encodedPassword := url.QueryEscape(info.Password)
+
 	// SQL Server DSN格式: server=host;user id=user;password=password;port=port;database=db
 	var dsn string
 	if info.Database != "" {
 		dsn = fmt.Sprintf("server=%s;user id=%s;password=%s;port=%s;database=%s",
 			info.Host,
 			info.User,
-			info.Password,
+			encodedPassword,
 			info.Port,
 			info.Database,
 		)
@@ -508,7 +512,7 @@ func BuildSQLServerDSN(info ConnectionInfo) string {
 		dsn = fmt.Sprintf("server=%s;user id=%s;password=%s;port=%s",
 			info.Host,
 			info.User,
-			info.Password,
+			encodedPassword,
 			info.Port,
 		)
 	}

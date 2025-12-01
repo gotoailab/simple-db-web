@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -705,12 +706,16 @@ func BuildMongoDBDSN(info ConnectionInfo) string {
 		return info.DSN
 	}
 
+	// 对用户名和密码进行URL编码，以支持特殊字符
+	encodedUser := url.QueryEscape(info.User)
+	encodedPassword := url.QueryEscape(info.Password)
+
 	// MongoDB DSN格式: mongodb://user:password@host:port/database
 	var dsn string
 	if info.User != "" && info.Password != "" {
 		dsn = fmt.Sprintf("mongodb://%s:%s@%s:%s",
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 			info.Host,
 			info.Port,
 		)

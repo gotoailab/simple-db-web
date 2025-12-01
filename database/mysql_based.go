@@ -2,7 +2,6 @@ package database
 
 import (
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -26,6 +25,7 @@ type DBConfig struct {
 }
 
 func (m *DBConfig) BuildDSN() string {
+	// MySQL驱动会自动处理密码中的特殊字符，不需要手动URL编码
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", m.User, m.Password, m.Host, m.Port, m.Database)
 }
 
@@ -45,11 +45,9 @@ func GetDBConfigFromDSN(dsn string) (*DBConfig, error) {
 		host = addrs[0]
 	}
 	user := parsedDSN.User
-	pwd, err := url.PathUnescape(parsedDSN.Passwd)
-	if err != nil {
-		return nil, err
-	}
-	password := pwd
+	// 注意：mysqlDriver.ParseDSN 已经返回了原始密码，不需要再进行 URL 解码
+	// 如果进行 url.PathUnescape，会导致密码中包含 % 等字符时解析失败
+	password := parsedDSN.Passwd
 	database := parsedDSN.DBName
 	return &DBConfig{
 		Host:     host,

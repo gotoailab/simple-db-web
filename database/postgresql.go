@@ -493,23 +493,35 @@ func BuildPostgreSQLDSN(info ConnectionInfo) string {
 		return info.DSN
 	}
 
+	// 对密码进行URL编码，以支持特殊字符
+	// 注意：PostgreSQL lib/pq驱动使用key=value格式，密码中的空格和特殊字符需要转义
+	// 但是为了简化，我们使用单引号包裹包含空格或特殊字符的值
+	encodedPassword := info.Password
+	// 如果密码包含空格、单引号、反斜杠等特殊字符，需要转义
+	// 根据PostgreSQL文档，在key=value格式中，值中的反斜杠和单引号需要转义
+	encodedPassword = strings.ReplaceAll(encodedPassword, "\\", "\\\\")
+	encodedPassword = strings.ReplaceAll(encodedPassword, "'", "\\'")
+	encodedUser := info.User
+	encodedUser = strings.ReplaceAll(encodedUser, "\\", "\\\\")
+	encodedUser = strings.ReplaceAll(encodedUser, "'", "\\'")
+
 	// PostgreSQL DSN格式: postgres://user:password@host:port/database?sslmode=disable
 	// 或者使用 lib/pq 格式: host=host port=port user=user password=password dbname=database sslmode=disable
 	var dsn string
 	if info.Database != "" {
-		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dsn = fmt.Sprintf("host=%s port=%s user='%s' password='%s' dbname=%s sslmode=disable",
 			info.Host,
 			info.Port,
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 			info.Database,
 		)
 	} else {
-		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=disable",
+		dsn = fmt.Sprintf("host=%s port=%s user='%s' password='%s' sslmode=disable",
 			info.Host,
 			info.Port,
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 		)
 	}
 

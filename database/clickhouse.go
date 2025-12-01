@@ -406,6 +406,10 @@ func BuildClickHouseDSN(info ConnectionInfo) string {
 		return info.DSN
 	}
 
+	// 对用户名和密码进行URL编码，以支持特殊字符
+	encodedUser := url.QueryEscape(info.User)
+	encodedPassword := url.QueryEscape(info.Password)
+
 	// ClickHouse v1 驱动使用 tcp:// 协议
 	// 格式: tcp://host:port?username=user&password=pass&database=db
 	var dsn string
@@ -413,16 +417,16 @@ func BuildClickHouseDSN(info ConnectionInfo) string {
 		dsn = fmt.Sprintf("tcp://%s:%s?username=%s&password=%s&database=%s",
 			info.Host,
 			info.Port,
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 			info.Database,
 		)
 	} else {
 		dsn = fmt.Sprintf("tcp://%s:%s?username=%s&password=%s&database=default",
 			info.Host,
 			info.Port,
-			info.User,
-			info.Password,
+			encodedUser,
+			encodedPassword,
 		)
 	}
 
